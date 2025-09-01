@@ -1,707 +1,157 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Blood Bowl Sevens — Practice Board</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blood Bowl Practice Board — Choose Version</title>
 <style>
   :root{
-    --sq: 36px;      /* pitch square size */
-    --cols: 20;      /* length incl. TD zones */
-    --rows: 11;      /* width */
-    --board-w: calc(var(--cols) * var(--sq));
-    --board-h: calc(var(--rows) * var(--sq));
-
-    --panel: #161a22;
-    --panel-ink: #cfd6e6;
-    --muted: #94a3b8;
+    --bg:#0b0f16;
+    --panel:#0f141c;
+    --muted:#94a3b8;
+    --text:#e5e7eb;
+    --brand:#22c55e;
+    --brand-2:#60a5fa;
+    --border:#233044;
   }
-  *{box-sizing:border-box;}
-  html, body{height:100%;}
-  body{ margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; color: var(--panel-ink); background: linear-gradient(180deg, #0b0e13, #0a0d12); }
-
-  header{ position: sticky; top:0; z-index: 20; background: #0c1117e6; backdrop-filter: blur(6px); border-bottom: 1px solid #1f2937; padding: 8px 12px; display: grid; grid-template-columns: 1fr auto 1fr; align-items:center; gap:12px; }
-  .brand{font-weight:700; color:#e5e7eb}
-  .controls{display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:flex-end}
-  .btn{ background:#1f2937; border:1px solid #334155; color:#e5e7eb; padding:6px 10px; border-radius:8px; cursor:pointer; }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;
+    background:radial-gradient(1200px 600px at 70% 0%, #0e1522 0%, #0b0f16 60%);
+    color:var(--text);
+    font:14px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
+    display:flex; align-items:center; justify-content:center; padding:24px;
+  }
+  .wrap{width:min(900px, 96vw);}
+  header{margin:0 0 18px}
+  h1{font-size:22px; margin:0 0 6px}
+  .sub{color:var(--muted); font-size:13px}
+  .grid{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:16px}
+  .card{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:14px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.35);
+  }
+  .card h2{font-size:18px; margin:0 0 8px}
+  .card .desc{color:var(--muted); font-size:13px; margin-bottom:10px}
+  .row{display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap}
+  .slot{flex:1; min-width:180px; background:#0b1220; border:1px solid #233044; color:#dbe6ff; padding:8px 10px; border-radius:8px}
+  .btn{background:#111827; border:1px solid #334155; color:#dbe6ff; padding:8px 10px; border-radius:10px; cursor:pointer}
   .btn:hover{border-color:#475569}
-  .btn.small{padding:4px 8px; font-size:12px}
-  .btn.pulse{ box-shadow: 0 0 0 0 rgba(16,185,129,.7); animation: pulse 1.5s ease-out 1; }
-  @keyframes pulse { 0%{box-shadow:0 0 0 0 rgba(16,185,129,.5);} 70%{box-shadow:0 0 0 8px rgba(16,185,129,0);} 100%{box-shadow:0 0 0 0 rgba(16,185,129,0);} }
-
-  .counter{display:flex; align-items:center; gap:8px; background:#10151d; border:1px solid #223047; padding:6px 8px; border-radius:10px}
-  .counter .title{font-size:12px; color:var(--muted)}
-  .counter .val{min-width:2ch; text-align:center; font-weight:700}
-  .counter .btn{padding:2px 8px}
-  .counter.active{ border-color:#10b981; box-shadow:0 0 0 2px #10b98144 inset; }
-
-  main{ display:grid; gap:12px; padding:12px; align-items:start; }
-  .row-top{ display:grid; grid-template-columns: calc(var(--board-w) + 28px) 220px; gap:12px; justify-content:center; }
-  .row-bottom{ display:grid; grid-template-columns: 1fr 1fr; gap:12px; max-width: calc(var(--board-w) + 28px + 220px); margin:0 auto; }
-  .panel{ background: var(--panel); border:1px solid #1f2937; border-radius:14px; padding:10px; position:relative; }
-  .panel h3{margin:6px 0 8px; font-size:14px; color:#dbe6ff}
-  .panel .sub{font-size:12px; color:var(--muted); margin-top:-4px; margin-bottom:6px}
-
-  /* Dugout zones */
-  .dugout{display:grid; gap:8px}
-  .zones{display:grid; gap:8px}
-  .zones .zone{background:#0f141c; border:1px dashed #334155; border-radius:10px; padding:8px; position:relative}
-  .zone h4{margin:0 0 6px; font-size:12px; color:#a7b4cc}
-  .zone .droparea{position:relative; width:100%; min-height:80px}
-  .zone.small .droparea{ min-height:56px; }
-  .zone.reserves .droparea{ min-height:128px; }
-
-  /* Board & tokens */
-  #board-wrap{position:relative; width:var(--board-w); height:var(--board-h); margin:0 auto;}
-  #board{display:block; width:var(--board-w); height:var(--board-h); background:#12331a; border-radius:12px; border:2px solid #25333d}
-
-  .token{position:absolute; width: calc(var(--sq) * 0.8); height: calc(var(--sq) * 0.8); border-radius: 50%; display:flex; align-items:center; justify-content:center; font-weight:700; user-select:none; cursor:grab; border:2px solid #111827; box-shadow: 0 2px 6px #0008; transform: translate(-50%, -50%);}
-  .token:active{cursor:grabbing}
-  .home{background: radial-gradient(circle at 30% 30%, #5cc1ff, #1d4ed8);} /* blue */
-  .away{background: radial-gradient(circle at 30% 30%, #ff7c7c, #b91c1c);} /* red */
-  .ball{background: radial-gradient(circle at 35% 35%, #f8f3e7, #a07d3a); width: calc(var(--sq) * 0.6); height: calc(var(--sq) * 0.6); font-size:11px}
-  .label{pointer-events:none; color:#0a0e16; text-shadow:0 1px 0 #fff4}
-  .token .ballmark{ position:absolute; top:-6px; left:-6px; width:16px; height:16px; border-radius:50%; background: radial-gradient(circle at 35% 35%, #f8f3e7, #a07d3a); border:1px solid #2b2b2b; box-shadow:0 1px 2px #0007; }
-
-  /* Activated ring */
-  .token.activated{ box-shadow: 0 0 0 6px #10b981cc, 0 0 0 10px #10b98144, 0 2px 6px #0008; }
-
-  /* Role ring colors */
-  .ring{ position:absolute; inset:-4px; border-radius:50%; border:3px solid transparent; pointer-events:none; }
-  .ring.BLITZER{ border-color:#ef4444; }
-  .ring.THROWER{ border-color:#3b82f6; }
-  .ring.LINEMAN{ border-color:#94a3b8; }
-  .ring.BLOCKER{ border-color:#22c55e; }
-  .ring.CATCHER{ border-color:#f59e0b; }
-  .ring.OTHER1{ border-color:#a855f7; }
-  .ring.OTHER2{ border-color:#ffffff; }
-  
-	  /* Selectable tiles */
-	.opt{
-	  user-select:none;
-	  transition: background .15s, border-color .15s, box-shadow .15s;
-	}
-	.opt.active{
-	  background:#0d1b14;                 /* subtle green tint */
-	  border-color:#10b981;
-	  box-shadow:0 0 0 2px #10b98144 inset;
-	}
-	.opt:focus{
-	  outline: none;
-	  box-shadow:0 0 0 2px #60a5fa99;
-	}
-
-  /* Status overlays */
-  .status-stars{ position:absolute; inset:-2px; pointer-events:none; }
-  .status-stars::before{ content:"✦"; position:absolute; top:-6px; right:-6px; font-size:14px; color:#facc15; text-shadow:0 1px 2px #0008; }
-  .status-stars::after{ content:"✦"; position:absolute; bottom:-6px; left:-6px; font-size:12px; color:#fde68a; text-shadow:0 1px 2px #0008; }
-  .status-arrows{ position:absolute; inset:-4px; pointer-events:none; color:#10b981; font-size:12px; }
-  .status-arrows .a{ position:absolute; line-height:1; }
-  .status-arrows .up{    top:-6px;    left:50%; transform:translate(-50%,0); }
-  .status-arrows .down{  bottom:-6px;  left:50%; transform:translate(-50%,0); }
-  .status-arrows .left{  left:-6px;    top:50%;  transform:translate(0,-50%); }
-  .status-arrows .right{ right:-6px; top:50%; transform:translate(0,-50%); }
-
-  /* Minor grids inside dugouts */
-  .droparea::before{ content:""; position:absolute; inset:8px; border-radius:8px; border:1px solid #2b3a4f33;
-    background: repeating-linear-gradient(0deg, #22304722, #22304722 18px, transparent 18px, transparent 36px),
-                repeating-linear-gradient(90deg, #22304722, #22304722 18px, transparent 18px, transparent 36px); }
-
-  .legend{font-size:12px; color:var(--muted);}
-
-  /* Context menus */
-  #ctx, #ctx-sub{ position:fixed; background:#0f141c; border:1px solid #1f2937; border-radius:10px; padding:6px; display:none; min-width:80px; max-width:200px; }
-  #ctx{ z-index: 999; }
-  #ctx-sub{ z-index: 1000; }
-  #ctx button, #ctx-sub button{ width:100%; text-align:left; background:transparent; border:0; color:#dbe6ff; padding:6px 8px; border-radius:8px; cursor:pointer; white-space: normal;}
-  #ctx button:hover, #ctx-sub button:hover{ background:#17202b; }
-  #ctx .section{ font-size:11px; color:#94a3b8; padding:4px 6px; }
-
-  /* Saves & Slots dropdown */
-  .menu-wrap{ position:relative; }
-  #menuDropdown{ position:absolute; right:0; top:calc(100% + 6px); background:#0f141c; border:1px solid #1f2937; border-radius:12px; padding:10px; width:320px; display:none; z-index:200; }
-  #menuDropdown.show{ display:block; }
-  #menuDropdown h4{ margin:6px 0 8px; font-size:12px; color:#a7b4cc; }
-  #menuDropdown .row{ display:flex; gap:8px; align-items:center; margin-bottom:8px; }
-  #menuDropdown input[type="text"]{ flex:1; background:#0f141c; border:1px solid #334155; color:#dbe6ff; border-radius:8px; padding:6px 8px; }
-  #menuDropdown .sub{ font-size:12px; color:#94a3b8; }
+  .btn.brand{background:var(--brand); border-color:#16a34a; color:#052e1a; font-weight:700}
+  .btn.ghost{background:transparent}
+  .muted{color:var(--muted)}
+  footer{margin-top:18px; display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap}
+  .continue{display:none; gap:8px; align-items:center}
+  .pill{display:inline-block; padding:4px 8px; border:1px solid var(--border); border-radius:999px; background:#0b1220; color:#cbd5e1}
+  @media (max-width:720px){ .grid{grid-template-columns:1fr} }
 </style>
 </head>
 <body>
-  <header>
-    <div class="brand">Blood Bowl Sevens — Practice Board</div>
-    <div style="display:flex; gap:10px; align-items:center; justify-content:center">
-      <div class="counter" id="scoreA"><span class="title">Home</span><button class="btn small" data-delta="-1">−</button><span class="val">0</span><button class="btn small" data-delta="1">+</button></div>
-      <button class="btn" id="endTurn" title="End active team: ✦→▼, clear Activated, pass turn" style="min-width:160px">End Turn (Home → Away)</button>
-      <div class="counter" id="scoreB"><span class="title">Away</span><button class="btn small" data-delta="-1">−</button><span class="val">0</span><button class="btn small" data-delta="1">+</button></div>
-    </div>
-    <div class="controls">
-      <div class="menu-wrap">
-        <button class="btn" id="menuSaves" aria-haspopup="true" aria-expanded="false">Saves & Slots ▾</button>
-        <div id="menuDropdown" role="menu" aria-labelledby="menuSaves">
-          <h4>Save Slot</h4>
-          <div class="row">
-            <input id="slotInput" type="text" placeholder="default" />
-            <button class="btn small" id="slotSwitch">Switch</button>
-            <button class="btn small" id="slotCopy">Copy link</button>
-          </div>
-          <div class="sub" id="slotHint"></div>
-          <h4>Save / Load</h4>
-          <div class="row">
-            <button class="btn small" id="save">Save</button>
-            <button class="btn small" id="load">Load</button>
-          </div>
-          <div class="row">
-            <button class="btn small" id="export">Export JSON</button>
-            <label class="btn small" for="importFile">Import JSON</label>
-            <input id="importFile" type="file" accept="application/json" style="display:none" />
-          </div>
-          <div class="row" style="justify-content:flex-end">
-            <button class="btn small" id="reset">Reset Slot</button>
-          </div>
+  <div class="wrap">
+    <header>
+      <h1>Blood Bowl Practice Board</h1>
+      <div class="sub">Choose a board type below. Optionally enter a save <b>slot</b> to jump straight back into a game.</div>
+    </header>
+
+    <div class="grid">
+      <section class="card" data-variant="sevens">
+        <h2>Sevens</h2>
+        <div class="desc">11 × 20 (wide zones 2). Has setup section lines at 7 and 13.</div>
+        <div class="row">
+          <input class="slot" id="slot-sevens" placeholder="Optional slot, e.g. league-1">
+          <button class="btn brand" data-open="same">Open</button>
+          <button class="btn" data-open="new">Open in new tab</button>
         </div>
+        <div class="muted" style="margin-top:6px">File: <span class="pill" title="Change in PAGES mapping inside index.html">index_sevens.html</span></div>
+      </section>
+
+      <section class="card" data-variant="full">
+        <h2>Full Board</h2>
+        <div class="desc">15 × 26 (wide zones 4). Single center line (line of scrimmage).</div>
+        <div class="row">
+          <input class="slot" id="slot-full" placeholder="Optional slot, e.g. league-1">
+          <button class="btn brand" data-open="same">Open</button>
+          <button class="btn" data-open="new">Open in new tab</button>
+        </div>
+        <div class="muted" style="margin-top:6px">File: <span class="pill" title="Change in PAGES mapping inside index.html">index_fullboard.html</span></div>
+      </section>
+    </div>
+
+    <footer>
+      <div class="continue" id="continueBox">
+        <span class="muted">Last opened:</span>
+        <span class="pill" id="lastVariant">–</span>
+        <span class="pill" id="lastSlot">–</span>
+        <button class="btn" id="continueBtn">Continue</button>
       </div>
-    </div>
-  </header>
-
-  <main>
-    <div class="row-top">
-      <section class="panel">
-        <div id="board-wrap">
-          <canvas id="board" width="720" height="396"></canvas>
-          <canvas id="marks" width="720" height="396" style="position:absolute; inset:0; pointer-events:none"></canvas>
-        </div>
-        <div class="legend" style="margin-top:8px">
-          <div>
-            <span style="display:inline-block; width:14px; height:14px; background:#12331a; border:1px solid #25333d;"></span>&nbsp;Pitch &nbsp;&nbsp;
-            <span style="display:inline-block; width:14px; height:14px; background:#1b3d23; border:1px solid #2e4936;"></span>&nbsp;Wide Zones (top/bottom 2)
-            &nbsp;&nbsp;<span style="display:inline-block; width:14px; height:14px; background:#1d4ed8;"></span>&nbsp;Home TD (blue)
-            &nbsp;&nbsp;<span style="display:inline-block; width:14px; height:14px; background:#b91c1c;"></span>&nbsp;Away TD (red)
-            &nbsp;&nbsp;— Hold <b>X</b> for 3×3 scatter
-          </div>
-        </div>
-      </section>
-
-      <section class="panel">
-        <h3>Game Panel</h3>
-        <div class="zone"><h4>Ball Park</h4><div class="droparea" id="BALL_PARK" style="min-height:56px"></div></div>
-        <h3 style="margin-top:14px">Turn / Half</h3>
-        <div class="sub">Active team is highlighted on the scoreboard.</div>
-        <div class="seg" style="display:flex; gap:6px; margin:6px 0 8px">
-          <div class="opt" id="half1" style="flex:1; border:1px solid #334155; border-radius:8px; padding:6px; text-align:center; cursor:pointer; background:#0f141c;">1st Half</div>
-          <div class="opt" id="half2" style="flex:1; border:1px solid #334155; border-radius:8px; padding:6px; text-align:center; cursor:pointer; background:#0f141c;">2nd Half</div>
-        </div>
-        <div class="sub">Who received first?</div>
-        <div class="seg" style="display:flex; gap:6px;">
-          <div class="opt" id="recvHome" style="flex:1; border:1px solid #334155; border-radius:8px; padding:6px; text-align:center; cursor:pointer; background:#0f141c;">Home</div>
-          <div class="opt" id="recvAway" style="flex:1; border:1px solid #334155; border-radius:8px; padding:6px; text-align:center; cursor:pointer; background:#0f141c;">Away</div>
-        </div>
-      </section>
-    </div>
-
-    <div class="row-bottom">
-      <section class="panel">
-        <h3>Home Dugout</h3>
-        <div class="dugout" id="dugoutA">
-          <div class="row" style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-bottom:6px">
-            <button class="btn small" id="addHome">+ Home Token</button>
-            <div class="counter" id="turnA"><span class="title">Home Turn</span><button class="btn small" data-delta="-1">−</button><span class="val">0</span><button class="btn small" data-delta="1">+</button></div>
-            <div class="counter" id="rrA"><span class="title">Home RR</span><button class="btn small" data-delta="-1">−</button><span class="val">0</span><button class="btn small" data-delta="1">+</button></div>
-          </div>
-          <div class="zones">
-            <div class="zone reserves" data-zone="A_RES"><h4>Reserves</h4><div class="droparea" id="A_RES"></div></div>
-            <div class="zone small" data-zone="A_KO"><h4>KO'd</h4><div class="droparea" id="A_KO"></div></div>
-            <div class="zone small" data-zone="A_CAS"><h4>Casualties</h4><div class="droparea" id="A_CAS"></div></div>
-          </div>
-        </div>
-      </section>
-
-      <section class="panel">
-        <h3>Away Dugout</h3>
-        <div class="dugout" id="dugoutB">
-          <div class="row" style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-bottom:6px">
-            <button class="btn small" id="addAway">+ Away Token</button>
-            <div class="counter" id="turnB"><span class="title">Away Turn</span><button class="btn small" data-delta="-1">−</button><span class="val">0</span><button class="btn small" data-delta="1">+</button></div>
-            <div class="counter" id="rrB"><span class="title">Away RR</span><button class="btn small" data-delta="-1">−</button><span class="val">0</span><button class="btn small" data-delta="1">+</button></div>
-          </div>
-          <div class="zones">
-            <div class="zone reserves" data-zone="B_RES"><h4>Reserves</h4><div class="droparea" id="B_RES"></div></div>
-            <div class="zone small" data-zone="B_KO"><h4>KO'd</h4><div class="droparea" id="B_KO"></div></div>
-            <div class="zone small" data-zone="B_CAS"><h4>Casualties</h4><div class="droparea" id="B_CAS"></div></div>
-          </div>
-        </div>
-      </section>
-    </div>
-  </main>
-
-  <div id="ctx"></div>
-  <div id="ctx-sub"></div>
+      <div class="muted">Tip: bookmark with <code>?slot=your-slot</code> to re-open that save automatically.</div>
+    </footer>
+  </div>
 
 <script>
 (function(){
-  'use strict';
+  // Map variants to actual files in your repo. Adjust names here if you rename files.
+  const PAGES = {
+    sevens: 'index_sevens.html',
+    full:   'index_fullboard.html'
+  };
 
-  var SQ = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sq'),10);
-  var COLS = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--cols'),10);
-  var ROWS = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--rows'),10);
-
-  // ===== Board drawing =====
-  var boardWrap = document.getElementById('board-wrap');
-  var board = document.getElementById('board');
-  var ctx = board.getContext('2d');
-  var marks = document.getElementById('marks');
-  var mctx = marks.getContext('2d');
-
-  function drawBoard(){
-    var w = COLS * SQ, h = ROWS * SQ;
-    board.width = w; board.height = h; marks.width = w; marks.height = h;
-    ctx.fillStyle = '#12331a'; ctx.fillRect(0,0,w,h);
-    // wide zones
-    ctx.fillStyle = '#1b3d23'; ctx.fillRect(0,0,w,SQ*2); ctx.fillRect(0,h-SQ*2,w,SQ*2);
-    // TD zones
-    ctx.fillStyle = '#1d4ed8'; ctx.fillRect(0,0,SQ,h);
-    ctx.fillStyle = '#b91c1c'; ctx.fillRect(w-SQ,0,SQ,h);
-    // grid
-    ctx.strokeStyle = '#ffffff22'; ctx.lineWidth = 1;
-    for(var gx=0;gx<=COLS;gx++){ ctx.beginPath(); ctx.moveTo(gx*SQ+0.5,0); ctx.lineTo(gx*SQ+0.5,h); ctx.stroke(); }
-    for(var gy=0;gy<=ROWS;gy++){ ctx.beginPath(); ctx.moveTo(0,gy*SQ+0.5); ctx.lineTo(w,gy*SQ+0.5); ctx.stroke(); }
-    // section lines at 7 and 13
-    ctx.strokeStyle = '#a78bfa'; ctx.lineWidth = 2;
-    [7,13].forEach(function(c){ ctx.beginPath(); ctx.moveTo(c*SQ+0.5,0); ctx.lineTo(c*SQ+0.5,h); ctx.stroke(); });
+  // If someone visits index.html?variant=sevens&slot=foo, auto-forward.
+  const params = new URLSearchParams(location.search);
+  const vParam = params.get('variant');
+  const sParam = params.get('slot');
+  if (vParam && PAGES[vParam]){
+    const target = PAGES[vParam] + (sParam ? ('?slot=' + encodeURIComponent(sParam)) : '');
+    location.replace(target);
+    return;
   }
-  drawBoard();
 
-  // ===== Square markers (Alt+click) =====
-  var squareMarks = new Set();
-  function redrawMarks(){
-    mctx.clearRect(0,0,marks.width,marks.height);
-    mctx.fillStyle = '#10b98188';
-    squareMarks.forEach(function(key){ var pr = key.split(','); var c = parseInt(pr[0],10), r = parseInt(pr[1],10); mctx.beginPath(); mctx.arc(c*SQ + SQ/2, r*SQ + SQ/2, 6, 0, Math.PI*2); mctx.fill(); });
-  }
-  boardWrap.addEventListener('click', function(e){
-    if(!e.altKey) return;
-    var rect = board.getBoundingClientRect(); var x = e.clientX - rect.left, y = e.clientY - rect.top;
-    if(x<0||y<0||x>rect.width||y>rect.height) return;
-    var col = Math.floor(x / SQ), row = Math.floor(y / SQ); var key = col+','+row;
-    if(squareMarks.has(key)) squareMarks.delete(key); else squareMarks.add(key); redrawMarks(); saveLS();
+  // Wire the cards
+  document.querySelectorAll('.card').forEach(card => {
+    card.addEventListener('click', e => {
+      const btn = e.target.closest('button[data-open]');
+      if(!btn) return;
+      const variant = card.getAttribute('data-variant');
+      const slot = card.querySelector('.slot').value.trim();
+      openVariant(variant, slot, btn.getAttribute('data-open') === 'new');
+    });
+    // Enter in slot input opens in same tab
+    const slotInput = card.querySelector('.slot');
+    slotInput.addEventListener('keydown', e => {
+      if(e.key === 'Enter'){
+        const variant = card.getAttribute('data-variant');
+        openVariant(variant, slotInput.value.trim(), false);
+      }
+    });
   });
 
-  // ===== Scatter overlay (hold X): simple 3x3 =====
-  function drawScatterOverlay(on){
-    if(!on){ redrawMarks(); return; }
-    redrawMarks();
-    var cell = SQ; var size = cell*3; var cx = board.width/2, cy = board.height/2; var left = Math.round(cx - size/2) + 0.5; var top = Math.round(cy - size/2) + 0.5;
-    mctx.save(); mctx.fillStyle = 'rgba(11,18,32,0.70)'; mctx.fillRect(0,0,board.width,board.height);
-    mctx.strokeStyle = '#93c5fd'; mctx.lineWidth = 2; mctx.strokeRect(left, top, size, size);
-    mctx.strokeStyle = '#93c5fd66'; mctx.lineWidth = 1;
-    for(var i=1;i<3;i++){ var vx = left + i*cell; mctx.beginPath(); mctx.moveTo(vx, top); mctx.lineTo(vx, top+size); mctx.stroke(); var vy = top + i*cell; mctx.beginPath(); mctx.moveTo(left, vy); mctx.lineTo(left+size, vy); mctx.stroke(); }
-    var nums = [['1','2','3'],['4','', '5'],['6','7','8']]; mctx.fillStyle = '#cbd5e1'; mctx.font='14px system-ui'; mctx.textAlign='center'; mctx.textBaseline='middle';
-    for(var r=0;r<3;r++){ for(var c=0;c<3;c++){ var t = nums[r][c]; if(!t) continue; var tx = left + c*cell + cell/2; var ty = top + r*cell + cell/2; mctx.fillText(t, tx, ty); } }
-    mctx.restore();
-  }
-  var _xHeld = false;
-  document.addEventListener('keydown', function(e){ var k = e.key||''; if(k.toLowerCase()==='x' && !_xHeld){ _xHeld=true; drawScatterOverlay(true); } });
-  document.addEventListener('keyup', function(e){ var k = e.key||''; if(k.toLowerCase()==='x'){ _xHeld=false; drawScatterOverlay(false); } });
-  window.addEventListener('blur', function(){ if(_xHeld){ _xHeld=false; drawScatterOverlay(false); } });
-
-  // ===== Zones & state =====
-  var zones = { A_RES: document.getElementById('A_RES'), A_KO: document.getElementById('A_KO'), A_CAS: document.getElementById('A_CAS'), B_RES: document.getElementById('B_RES'), B_KO: document.getElementById('B_KO'), B_CAS: document.getElementById('B_CAS'), BALL_PARK: document.getElementById('BALL_PARK') };
-
-  var state = { tokens: [], counters: { scoreA:0, scoreB:0, turnA:0, turnB:0, rrA:0, rrB:0 }, activeTeam:'home', half:1, receivedFirst:'', slot:'default' };
-  var nextId = 1;
-
-  // ===== Save slot (path + ?slot=) =====
-  var PATH_KEY = (location.pathname || '/').replace(/\/+$/,'');
-  var _params = new URLSearchParams(location.search);
-  if(!_params.has('slot')){
-    var remembered = null;
-    try { remembered = localStorage.getItem('bb7s_last_slot:'+PATH_KEY); } catch(e){}
-    if(remembered){ _params.set('slot', remembered); history.replaceState(null,'', location.pathname + '?' + _params.toString()); }
-  }
-  var currentSlot = _params.get('slot') || (function(){ try{ return localStorage.getItem('bb7s_last_slot:'+PATH_KEY) || 'default'; }catch(e){ return 'default'; } })();
-  state.slot = currentSlot;
-  if(!_params.has('slot')){ _params.set('slot', state.slot); history.replaceState(null,'', location.pathname + '?' + _params.toString()); }
-  function saveKey(){ return 'bb7s_state:'+PATH_KEY+':'+state.slot; }
-
-  // ===== Tokens =====
-  function teamCount(team){ var n=0; for(var i=0;i<state.tokens.length;i++) if(state.tokens[i].team===team) n++; return n; }
-
-  function makeTokenDOM(t){
-    var el = document.createElement('div'); el.className = 'token ' + (t.team==='home'?'home': t.team==='away'?'away':'ball'); el.dataset.id = t.id;
-    var ring = document.createElement('div'); ring.className = 'ring ' + (t.role||''); el.appendChild(ring);
-    var lab = document.createElement('div'); lab.className='label'; lab.textContent = t.label; el.appendChild(lab);
-    var stars = document.createElement('div'); stars.className='status-stars'; stars.style.display='none'; el.appendChild(stars);
-    var arrows = document.createElement('div'); arrows.className='status-arrows'; arrows.style.display='none'; ['up','down','left','right'].forEach(function(dir){ var d=document.createElement('div'); d.className='a '+dir; d.textContent='▼'; arrows.appendChild(d); }); el.appendChild(arrows);
-    var ballmark = document.createElement('div'); ballmark.className='ballmark'; if(!t.hasBall) ballmark.style.display='none'; el.appendChild(ballmark);
-
-    el.addEventListener('dblclick', function(){ if(t.team==='ball') return; var nv = prompt('Token label:', t.label); if(nv!==null){ t.label = nv; lab.textContent = nv; saveLS(); } });
-    // Right-click menu only; no drag on right click
-    el.addEventListener('contextmenu', function(e){ if(t.team==='ball'){ e.preventDefault(); return; } e.preventDefault(); openCtx(e.clientX, e.clientY, t, el, ring, ballmark, stars, arrows); });
-
-    enableDrag(el);
-    applyStatusVisual(t, el, stars, arrows);
-    if(t.activated) applyActivated(el, true);
-    return el;
+  function openVariant(variant, slot, newTab){
+    const page = PAGES[variant];
+    if(!page){ alert('Missing page mapping for '+variant); return; }
+    const url = page + (slot ? ('?slot='+encodeURIComponent(slot)) : '');
+    try {
+      localStorage.setItem('bb_last_choice', JSON.stringify({variant, slot}));
+    } catch(e){}
+    if(newTab) window.open(url, '_blank');
+    else location.href = url;
   }
 
-  function applyActivated(el, on){ if(on) el.classList.add('activated'); else el.classList.remove('activated'); }
-  function applyStatusVisual(t, el, stars, arrows){ stars.style.display = (t.status===2)?'block':'none'; arrows.style.display = (t.status===1)?'block':'none'; }
-
-  function mountToken(t){ var el = makeTokenDOM(t); if(t.place==='board'){ boardWrap.appendChild(el); el.style.left = (t.x*SQ + SQ/2)+'px'; el.style.top = (t.y*SQ + SQ/2)+'px'; } else { zones[t.place].appendChild(el); layoutZone(t.place); } }
-
-  function layoutZone(zoneId){ var z = zones[zoneId]; if(!z) return; var tokens = Array.prototype.slice.call(z.querySelectorAll('.token')); var innerPad=12, cell=32; var rect = z.getBoundingClientRect(); var cols = Math.max(1, Math.floor((rect.width - innerPad*2)/cell)); tokens.forEach(function(elm, idx){ var gx = idx%cols, gy=Math.floor(idx/cols); elm.style.left=(innerPad + gx*cell)+'px'; elm.style.top=(innerPad + gy*cell)+'px'; elm.style.transform='translate(0,0)'; elm.style.position='absolute'; }); }
-
-  function addToken(team){ var t = { id:String(nextId++), team:team, label:String(teamCount(team)+1), x:0, y:0, place: team==='home'?'A_RES':'B_RES', status:0, role:'', activated:false, hasBall:false }; state.tokens.push(t); mountToken(t); saveLS(); }
-
-  function ensureBall(){ if(!state.tokens.some(function(t){return t.team==='ball';})){ var t = { id:String(nextId++), team:'ball', label:'⚽', x:0, y:0, place:'BALL_PARK', status:0, role:'', activated:false, hasBall:false }; state.tokens.push(t); mountToken(t); } }
-
-  function ensureStatusNodes(el){ var stars = el.querySelector('.status-stars'); if(!stars){ stars = document.createElement('div'); stars.className='status-stars'; el.appendChild(stars); } var arrows = el.querySelector('.status-arrows'); if(!arrows){ arrows = document.createElement('div'); arrows.className='status-arrows'; ['up','down','left','right'].forEach(function(dir){ var d=document.createElement('div'); d.className='a '+dir; d.textContent='▼'; arrows.appendChild(d); }); el.appendChild(arrows); } return {stars:stars, arrows:arrows}; }
-
-  function updateTokenVisual(t){ var el = document.querySelector('.token[data-id="'+t.id+'"]'); if(!el) return; var n = ensureStatusNodes(el); applyStatusVisual(t, el, n.stars, n.arrows); applyActivated(el, !!t.activated); }
-
-  function setStatus(t, status){
-    var prev = t.status;
-    t.status = status;
-    updateTokenVisual(t);
-    // Auto-activate only if it's the ACTIVE team's turn
-    if(prev===1 && status===0 && t.team === state.activeTeam){
-      t.activated = true;
-      var el = document.querySelector('.token[data-id="'+t.id+'"]');
-      if(el) applyActivated(el, true);
+  // Show "Continue last game" if we have a remembered choice
+  try {
+    const last = JSON.parse(localStorage.getItem('bb_last_choice')||'null');
+    if(last && PAGES[last.variant]){
+      document.getElementById('continueBox').style.display = 'flex';
+      document.getElementById('lastVariant').textContent = last.variant === 'sevens' ? 'Sevens' : 'Full Board';
+      document.getElementById('lastSlot').textContent = last.slot ? ('slot=' + last.slot) : 'no slot';
+      document.getElementById('continueBtn').addEventListener('click', function(){
+        openVariant(last.variant, last.slot||'', false);
+      });
     }
-  }
-
-  // Team end-turn: only for that team — ✦ -> ▼ and clear Activated
-  function teamEndTurn(team){ state.tokens.forEach(function(t){ if(t.team===team){ if(t.status===2) t.status=1; if(t.activated) t.activated=false; updateTokenVisual(t); } }); saveLS(); }
-
-  // Active team UI
-  function otherTeam(team){ return team==='home'?'away':'home'; }
-  function updateActiveUI(){ var homeScore = document.getElementById('scoreA'); var awayScore = document.getElementById('scoreB'); homeScore.classList.toggle('active', state.activeTeam==='home'); awayScore.classList.toggle('active', state.activeTeam==='away'); var btn = document.getElementById('endTurn'); btn.textContent = 'End Turn (' + (state.activeTeam==='home'?'Home → Away':'Away → Home') + ')'; btn.classList.add('pulse'); setTimeout(function(){ btn.classList.remove('pulse'); }, 600); }
-  function doEndTurn(){ var current = state.activeTeam; teamEndTurn(current); var next = otherTeam(current); state.activeTeam = next; if(next==='home'){ state.counters.turnA = (state.counters.turnA||0)+1; document.querySelector('#turnA .val').textContent = state.counters.turnA; } else { state.counters.turnB = (state.counters.turnB||0)+1; document.querySelector('#turnB .val').textContent = state.counters.turnB; } updateActiveUI(); saveLS(); }
-
-  // Dragging & snapping — left click only
-  var dragging=null, origin=null; var rel={dx:0,dy:0};
-  function enableDrag(elm){ var moved=false, startX=0, startY=0; elm.addEventListener('pointerdown', function(e){ if(e.pointerType!=='touch' && e.button!==0) return; moved=false; startX=e.clientX; startY=e.clientY; dragging=elm; elm.setPointerCapture(e.pointerId); rel.dx = elm.offsetWidth/2; rel.dy = elm.offsetHeight/2; var parent = elm.parentElement===boardWrap ? boardWrap : elm.parentElement; var p = parent.getBoundingClientRect(); elm.style.position='absolute'; elm.style.left=(e.clientX - p.left - rel.dx)+'px'; elm.style.top=(e.clientY - p.top - rel.dy)+'px'; var t = getToken(elm); origin = { place:t.place, x:t.x, y:t.y, parent: elm.parentElement }; }); elm.addEventListener('pointermove', function(e){ if(!dragging) return; var parent = dragging.parentElement===boardWrap ? boardWrap : dragging.parentElement; var p = parent.getBoundingClientRect(); dragging.style.left=(e.clientX - p.left - rel.dx)+'px'; dragging.style.top=(e.clientY - p.top - rel.dy)+'px'; if(!moved && (Math.abs(e.clientX-startX)>3 || Math.abs(e.clientY-startY)>3)) moved=true; }); elm.addEventListener('pointerup', function(e){ if(!dragging) return; var el2=dragging; dragging.releasePointerCapture(e.pointerId); dragging=null; var ok = drop(el2, e.clientX, e.clientY); if(moved) el2._suppressClick = true; if(ok){ var t = getToken(el2); if(t && (t.team==='home'||t.team==='away')){ var movedSquares = (origin && origin.place==='board' && t.place==='board' && (t.x!==origin.x || t.y!==origin.y)); if(movedSquares && t.team === state.activeTeam && !t.activated){ t.activated=true; applyActivated(el2,true); } } } else { var t2 = getToken(el2); if(origin.place==='board'){ if(el2.parentElement!==boardWrap){ if(el2.parentElement) el2.parentElement.removeChild(el2); boardWrap.appendChild(el2); } el2.style.left=(origin.x*SQ + SQ/2)+'px'; el2.style.top=(origin.y*SQ + SQ/2)+'px'; el2.style.transform='translate(-50%,-50%)'; t2.place='board'; t2.x=origin.x; t2.y=origin.y; } else { var z = zones[origin.place]; if(el2.parentElement!==z){ if(el2.parentElement) el2.parentElement.removeChild(el2); z.appendChild(el2); } t2.place = origin.place; layoutZone(origin.place); } } saveLS(); }); }
-
-  function tokenAt(col, row, excludeId){ for(var i=0;i<state.tokens.length;i++){ var t = state.tokens[i]; if(t.place==='board' && t.x===col && t.y===row && t.id!==excludeId){ return t; } } return null; }
-  function scrubToken(t){
-    var hadBall = !!t.hasBall;
-    // Clear statuses
-    t.status = 0;
-    t.activated = false;
-    // Ensure any visible ball icon on the token is removed too
-    setPlayerHasBall(t, false);
-	t.x = -1; 
-	t.y = -1; 
-    // Refresh visuals
-    updateTokenVisual(t);
-    // Park the loose ball icon if the player had it
-    if(hadBall) ensureBallInPark();
-  }
-  
-  function sendToZone(t, zoneId){
-  var wasOnBoard = (t.place === 'board');
-  var bx = t.x, by = t.y;
-  var hadBall = !!t.hasBall;
-
-  scrubToken(t);  // this clears ball & parks it, statuses, etc.
-
-  var el = document.querySelector('.token[data-id="'+t.id+'"]');
-  var z  = zones[zoneId];
-  if(!z || !el) return;
-
-  if(el.parentElement !== z){
-    if(el.parentElement) el.parentElement.removeChild(el);
-    z.appendChild(el);
-  }
-
-  t.place = zoneId;
-  t.x = -1; t.y = -1;       // clear stale board coords
-  layoutZone(zoneId);
-
-  if(wasOnBoard && hadBall){
-    placeLooseBallAt(bx, by);   // drop ball on the square they left
-  }
-
-  saveLS();
-}
-
-
-function drop(elm, cx, cy){
-  var b = board.getBoundingClientRect();
-  var t = getToken(elm);
-
-  // ===== Dropped on the board =====
-  if (cx>=b.left && cx<=b.right && cy>=b.top && cy<=b.bottom){
-    var x = cx - b.left, y = cy - b.top;
-    var col = Math.round(x / SQ - 0.5), row = Math.round(y / SQ - 0.5);
-    if(col<0) col=0; if(col>COLS-1) col=COLS-1;
-    if(row<0) row=0; if(row>ROWS-1) row=ROWS-1;
-
-    var occ = tokenAt(col,row, t.id);
-
-    // Ball token logic
-    if (t.team === 'ball'){
-      // Ball onto a player → give possession and park icon
-      if (occ && (occ.team==='home' || occ.team==='away')){
-        giveBallToPlayer(occ);
-        ensureBallInPark();
-        return true;
-      }
-      // Free ball on board
-      if (elm.parentElement!==boardWrap){ if(elm.parentElement) elm.parentElement.removeChild(elm); boardWrap.appendChild(elm); }
-      elm.style.left = (col*SQ + SQ/2) + 'px';
-      elm.style.top  = (row*SQ + SQ/2) + 'px';
-      elm.style.transform='translate(-50%, -50%)';
-      t.place='board'; t.x=col; t.y=row;
-      clearAllPlayerPossessionExcept(null);
-      return true;
-    }
-
-    // Player onto occupied player square → reject drop
-    if (occ && (occ.team==='home' || occ.team==='away')) return false;
-
-    // Move player to board
-    if (elm.parentElement!==boardWrap){ if(elm.parentElement) elm.parentElement.removeChild(elm); boardWrap.appendChild(elm); }
-    elm.style.left = (col*SQ + SQ/2) + 'px';
-    elm.style.top  = (row*SQ + SQ/2) + 'px';
-    elm.style.transform='translate(-50%, -50%)';
-    t.place='board'; t.x=col; t.y=row;
-
-    // If the loose ball icon was here, give it to the mover
-    if (occ && occ.team==='ball'){ giveBallToPlayer(t); }
-    return true;
-  }
-
-  // ===== Dropped into a zone (dugouts / ball park, etc.) =====
-  for (var id in zones){
-    if(!Object.prototype.hasOwnProperty.call(zones,id)) continue;
-    var z = zones[id];
-    var r = z.getBoundingClientRect();
-    if (cx>=r.left && cx<=r.right && cy>=r.top && cy<=r.bottom){
-
-      // Move DOM
-      if (elm.parentElement!==z){ if(elm.parentElement) elm.parentElement.removeChild(elm); z.appendChild(elm); }
-
-      // Save pre-scrub info about where the player came from
-      var isDugout = /_(RES|KO|CAS)$/.test(id);
-      var fromBoard = (origin && origin.place==='board');
-      var hadBall   = !!t.hasBall;
-      var ox = fromBoard ? origin.x : -1;
-      var oy = fromBoard ? origin.y : -1;
-
-      // Place into zone
-      t.place = id;
-      layoutZone(id);
-
-      // If dragged from the board into a dugout: clear statuses, coords, and drop ball on last square.
-      if (isDugout && fromBoard){
-        scrubToken(t);          // clears statuses + removes possession (parks the ball icon)
-        t.x = -1; t.y = -1;     // clear any stale board coords
-
-        if (hadBall){
-          // Put a loose ball on the square they vacated
-          placeLooseBallAt(ox, oy);
-        }
-      } else {
-        // Non-dugout zones (belt & braces): ensure no stale board coords
-        t.x = -1; t.y = -1;
-      }
-
-      return true;
-    }
-  }
-
-  return false;
-}
-
-
-  function getToken(elm){ var id = elm.dataset.id; for(var i=0;i<state.tokens.length;i++){ if(state.tokens[i].id===id) return state.tokens[i]; } return null; }
-
-  // ===== Context menu =====
-  var ctxMenu = document.getElementById('ctx'); var ctxSub = document.getElementById('ctx-sub');
-  function openCtx(mx,my,t, el, ring, ballmark, stars, arrows){ closeCtx(); ctxMenu.innerHTML=''; function add(html, handler){ var b=document.createElement('button'); b.innerHTML=html; b.addEventListener('click', function(){ handler(); closeCtx(); saveLS(); }); ctxMenu.appendChild(b); } function section(txt){ var d=document.createElement('div'); d.className='section'; d.textContent=txt; ctxMenu.appendChild(d); }
-    section('Status'); add('In play (clear markers)', function(){ setStatus(t,0); }); add('Down (green arrows)', function(){ setStatus(t,1); }); add('Stunned (yellow ✦)', function(){ setStatus(t,2); });
-    section('Role ring'); var roleBtn = document.createElement('button'); roleBtn.textContent = 'Role ring ▸'; roleBtn.addEventListener('mouseenter', function(){ var subLeft = ctxMenu.getBoundingClientRect().right + 6; openRoleSub(t, ring, subLeft, roleBtn.getBoundingClientRect().top); }); roleBtn.addEventListener('click', function(){ var subLeft = ctxMenu.getBoundingClientRect().right + 6; openRoleSub(t, ring, subLeft, roleBtn.getBoundingClientRect().top); }); ctxMenu.appendChild(roleBtn);
-    section('Send to'); var sendBtn = document.createElement('button'); sendBtn.textContent = 'Send to ▸'; sendBtn.addEventListener('mouseenter', function(){ var subLeft = ctxMenu.getBoundingClientRect().right + 6; openSendSub(t, subLeft, sendBtn.getBoundingClientRect().top); }); sendBtn.addEventListener('click', function(){ var subLeft = ctxMenu.getBoundingClientRect().right + 6; openSendSub(t, subLeft, sendBtn.getBoundingClientRect().top); }); ctxMenu.appendChild(sendBtn);
-    section('Ball'); add(t.hasBall?'Remove ball (to park)':'Give ball to this player', function(){ if(t.hasBall){ setPlayerHasBall(t,false); ensureBallInPark(); } else { giveBallToPlayer(t); } });
-    section('Other'); add(t.activated?'Unmark activated':'Mark activated', function(){ t.activated=!t.activated; applyActivated(el,t.activated); }); add('<span style="color:#ef4444">Delete token</span>', function(){ delToken(t.id); });
-    ctxMenu.style.display='block'; ctxMenu.style.left=mx+'px'; ctxMenu.style.top=my+'px'; setTimeout(function(){
-      function outsideClick(ev){
-        if(!ctxMenu.contains(ev.target) && !ctxSub.contains(ev.target)){
-          closeCtx();
-          document.removeEventListener('click', outsideClick);
-        }
-      }
-      document.addEventListener('click', outsideClick);
-    },0);
-  }
-  function openRoleSub(t, ring, leftPos, top){
-    ctxSub.innerHTML='';
-    var roles=['BLITZER','THROWER','LINEMAN','BLOCKER','CATCHER','OTHER1','OTHER2','(none)'];
-    roles.forEach(function(rn){
-      var b=document.createElement('button');
-      b.textContent=rn;
-      b.addEventListener('click', function(){ t.role = rn==='(none)'?'':rn; ring.className='ring ' + (t.role||''); closeCtx(); saveLS(); });
-      ctxSub.appendChild(b);
-    });
-    ctxSub.style.display='block';
-    var cmRect = ctxMenu.getBoundingClientRect();
-    var subRect = ctxSub.getBoundingClientRect();
-    var left = Math.min(leftPos, window.innerWidth - subRect.width - 8);
-    var topPos = Math.max(8, Math.min(Math.max(cmRect.top, top), window.innerHeight - subRect.height - 8));
-    ctxSub.style.left= left + 'px';
-    ctxSub.style.top = topPos + 'px';
-  }
-  function openSendSub(t, leftPos, top){
-    ctxSub.innerHTML='';
-    var team = t.team==='home' ? 'A' : 'B';
-    var items=[["Reserves", team+'_RES'], ["KO'd", team+'_KO'], ["Casualties", team+'_CAS']];
-    items.forEach(function(it){
-      var b=document.createElement('button'); b.textContent=it[0];
-      b.addEventListener('click', function(){ sendToZone(t, it[1]); closeCtx(); saveLS(); });
-      ctxSub.appendChild(b);
-    });
-    ctxSub.style.display='block';
-    var cmRect = ctxMenu.getBoundingClientRect();
-    var subRect = ctxSub.getBoundingClientRect();
-    var left = Math.min(leftPos, window.innerWidth - subRect.width - 8);
-    var topPos = Math.max(8, Math.min(Math.max(cmRect.top, top), window.innerHeight - subRect.height - 8));
-    ctxSub.style.left= left + 'px';
-    ctxSub.style.top = topPos + 'px';
-  }
-  function closeCtx(){ ctxMenu.style.display='none'; ctxSub.style.display='none'; }
-  function delToken(id){ for(var i=0;i<state.tokens.length;i++){ if(state.tokens[i].id===id){ var t=state.tokens[i]; var el=document.querySelector('.token[data-id="'+id+'"]'); if(el && el.parentElement) el.parentElement.removeChild(el); state.tokens.splice(i,1); if(t.place && zones[t.place]) layoutZone(t.place); break; } } }
-
-  // ===== Ball helpers & possession =====
-  function setPlayerHasBall(t, has){ t.hasBall=!!has; var el=document.querySelector('.token[data-id="'+t.id+'"]'); if(el){ var bm=el.querySelector('.ballmark'); if(bm) bm.style.display = has?'block':'none'; } }
-  function clearAllPlayerPossessionExcept(exId){ for(var i=0;i<state.tokens.length;i++){ var p=state.tokens[i]; if(p.team==='home'||p.team==='away'){ if(exId && p.id===exId) continue; if(p.hasBall) setPlayerHasBall(p,false); } } }
-  function giveBallToPlayer(t){ clearAllPlayerPossessionExcept(t.id); setPlayerHasBall(t,true); parkBall(); saveLS(); }
-  function parkBall(){ var ball=null; for(var i=0;i<state.tokens.length;i++){ if(state.tokens[i].team==='ball'){ ball=state.tokens[i]; break; } } if(!ball) return; var el=document.querySelector('.token[data-id="'+ball.id+'"]'); if(el && el.parentElement!==zones.BALL_PARK){ if(el.parentElement) el.parentElement.removeChild(el); zones.BALL_PARK.appendChild(el); } ball.place='BALL_PARK'; layoutZone('BALL_PARK'); }
-  function ensureBallInPark(){ ensureBall(); parkBall(); }
-function placeLooseBallAt(col, row){
-  ensureBall();                       // make sure the ball token exists
-  clearAllPlayerPossessionExcept(null);
-
-  var ball = state.tokens.find(function(t){ return t.team === 'ball'; });
-  if(!ball) return;
-
-  var el = document.querySelector('.token[data-id="'+ball.id+'"]');
-  if(el && el.parentElement !== boardWrap){
-    if(el.parentElement) el.parentElement.removeChild(el);
-    boardWrap.appendChild(el);
-  }
-
-  ball.place = 'board';
-  ball.x = col;
-  ball.y = row;
-
-  el.style.left = (col * SQ + SQ/2) + 'px';
-  el.style.top  = (row * SQ + SQ/2) + 'px';
-  el.style.transform = 'translate(-50%, -50%)';
-}
-
-  // ===== Persistence (per-path + per-slot) =====
-  function saveLS(){ var data = { tokens: state.tokens.map(function(t){ return Object.assign({}, t); }), counters: Object.assign({}, state.counters), nextId: nextId, activeTeam: state.activeTeam, half: state.half, receivedFirst: state.receivedFirst, squareMarks: Array.from(squareMarks) }; try{ localStorage.setItem(saveKey(), JSON.stringify(data)); localStorage.setItem('bb7s_last_slot:'+PATH_KEY, state.slot); }catch(e){} }
-  function loadLS(){ var raw=null; try{ raw=localStorage.getItem(saveKey()); }catch(e){} try{ document.querySelectorAll('.token').forEach(function(n){ if(n && n.parentElement) n.parentElement.removeChild(n); }); state.tokens=[]; if(raw){ var data=JSON.parse(raw); Object.assign(state.counters, data.counters||{}); nextId=data.nextId||1; state.activeTeam=data.activeTeam||'home'; state.half=data.half||1; state.receivedFirst=data.receivedFirst||''; squareMarks.clear(); if(Array.isArray(data.squareMarks)) data.squareMarks.forEach(function(k){ squareMarks.add(k); }); redrawMarks(); (data.tokens||[]).forEach(function(t){ state.tokens.push(Object.assign({}, t)); mountToken(t); }); } else { state.counters={scoreA:0,scoreB:0,turnA:0,turnB:0,rrA:0,rrB:0}; nextId=1; state.activeTeam='home'; state.half=1; state.receivedFirst=''; squareMarks.clear(); redrawMarks(); } ['scoreA','scoreB','turnA','turnB','rrA','rrB'].forEach(function(id){ var el=document.getElementById(id); if(el){ el.querySelector('.val').textContent = state.counters[id]||0; } }); Object.keys(zones).forEach(layoutZone); ensureBall(); ensureBallInPark(); updateActiveUI(); refreshHalfUI(); refreshRecvUI(); return !!raw; }catch(err){ console.error(err); return false; } }
-
-  // ===== Header controls (dropdown) =====
-  function resetToBlank(){ document.querySelectorAll('.token').forEach(function(n){ if(n && n.parentElement) n.parentElement.removeChild(n); }); state.tokens=[]; state.counters={scoreA:0,scoreB:0,turnA:0,turnB:0,rrA:0,rrB:0}; nextId=1; squareMarks.clear(); redrawMarks(); state.activeTeam='home'; state.half=1; state.receivedFirst=''; ['scoreA','scoreB','turnA','turnB','rrA','rrB'].forEach(function(id){ var el=document.getElementById(id); if(el){ el.querySelector('.val').textContent = state.counters[id]; } }); ensureBall(); ensureBallInPark(); updateActiveUI(); refreshHalfUI(); refreshRecvUI(); }
-
-  document.getElementById('save').addEventListener('click', function(){ saveLS(); alert('Saved to browser storage.'); });
-  document.getElementById('load').addEventListener('click', function(){ if(!loadLS()) alert('No saved state found for this slot.'); });
-  document.getElementById('export').addEventListener('click', function(){ var data = localStorage.getItem(saveKey()) || '{}'; var blob=new Blob([data],{type:'application/json'}); var a=document.createElement('a'); a.href=URL.createObjectURL(blob); var safeSlot = (state.slot||'default').replace(/[^a-z0-9_-]+/gi,'-'); a.download='bb7s_state_'+ safeSlot +'.json'; a.click(); URL.revokeObjectURL(a.href); });
-  document.getElementById('importFile').addEventListener('change', function(e){ var f=e.target.files[0]; if(!f) return; var reader=new FileReader(); reader.onload=function(){ try{ localStorage.setItem(saveKey(), reader.result); loadLS(); alert('State imported into slot "'+state.slot+'".'); }catch(err){ alert('Import failed.'); } }; reader.readAsText(f); });
-  document.getElementById('reset').addEventListener('click', function(){ if(!confirm('Clear the board and reset this slot?')) return; try{ localStorage.removeItem(saveKey()); }catch(e){} resetToBlank(); saveLS(); });
-
-  // Dropdown open/close
-  var menuBtn = document.getElementById('menuSaves');
-  var menu = document.getElementById('menuDropdown');
-  menuBtn.addEventListener('click', function(e){ e.stopPropagation(); var open = menu.classList.toggle('show'); menuBtn.setAttribute('aria-expanded', open?'true':'false'); });
-  document.addEventListener('click', function(e){ if(!menu.contains(e.target) && e.target!==menuBtn){ menu.classList.remove('show'); menuBtn.setAttribute('aria-expanded','false'); } });
-  document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ menu.classList.remove('show'); menuBtn.setAttribute('aria-expanded','false'); } });
-
-  // Right panel toggles
-  function refreshHalfUI(){
-    var h1 = document.getElementById('half1');
-    var h2 = document.getElementById('half2');
-    var isFirst = (state.half === 1);
-    h1.classList.toggle('active', isFirst);
-    h2.classList.toggle('active', !isFirst);
-    h1.setAttribute('aria-pressed', isFirst ? 'true' : 'false');
-    h2.setAttribute('aria-pressed', !isFirst ? 'true' : 'false');
-  }
-
-function refreshRecvUI(){
-    var rh = document.getElementById('recvHome');
-    var ra = document.getElementById('recvAway');
-    var home = (state.receivedFirst === 'home');
-    var away = (state.receivedFirst === 'away');
-    rh.classList.toggle('active', home);
-    ra.classList.toggle('active', away);
-    rh.setAttribute('aria-pressed', home ? 'true' : 'false');
-    ra.setAttribute('aria-pressed', away ? 'true' : 'false');
-  }
-  document.getElementById('half1').addEventListener('click', function(){ state.half=1; refreshHalfUI(); saveLS(); });
-  document.getElementById('half2').addEventListener('click', function(){ state.half=2; refreshHalfUI(); saveLS(); });
-  document.getElementById('recvHome').addEventListener('click', function(){ state.receivedFirst='home'; refreshRecvUI(); saveLS(); });
-  document.getElementById('recvAway').addEventListener('click', function(){ state.receivedFirst='away'; refreshRecvUI(); saveLS(); });
-
-  // Save-slot UI
-  var slotInput = document.getElementById('slotInput');
-  var slotHint = document.getElementById('slotHint');
-  var slotSwitch = document.getElementById('slotSwitch');
-  var slotCopy = document.getElementById('slotCopy');
-  function refreshSlotUI(){ if(slotInput) slotInput.value = state.slot; if(slotHint) slotHint.textContent = 'Slot "'+state.slot+'" — autosaves locally for this path.'; }
-  refreshSlotUI();
-  slotSwitch.addEventListener('click', function(){ var newSlot = (slotInput.value || '').trim() || 'default'; if(newSlot === state.slot) return; state.slot = newSlot; var p = new URLSearchParams(location.search); p.set('slot', state.slot); history.replaceState(null, '', location.pathname + '?' + p.toString()); try{ localStorage.setItem('bb7s_last_slot:'+PATH_KEY, state.slot); }catch(e){} loadLS(); refreshSlotUI(); });
-  slotCopy.addEventListener('click', function(){ var base = location.href.split('#')[0].split('?')[0]; var link = base + '?slot=' + encodeURIComponent(state.slot); if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(link).then(function(){ alert('Link copied: '+link); }, function(){ prompt('Copy link:', link); }); } else { prompt('Copy link:', link); } });
-
-// Counters & token buttons wiring
-function bindCounter(id){
-  var el = document.getElementById(id);
-  if(!el) return;
-
-  var val = el.querySelector('.val');
-  var dec = el.querySelector('[data-delta="-1"]');
-  var inc = el.querySelector('[data-delta="1"]');
-
-  function refresh(){
-    if(!val) return;
-    val.textContent = state.counters[id] || 0;
-  }
-
-  if(dec){
-    dec.addEventListener('click', function(){
-      state.counters[id] = Math.max(0, (state.counters[id]||0) - 1);
-      refresh(); saveLS();
-    });
-  }
-  if(inc){
-    inc.addEventListener('click', function(){
-      state.counters[id] = (state.counters[id]||0) + 1;
-      refresh(); saveLS();
-    });
-  }
-  refresh();
-}
-
-var COUNTER_IDS = ['scoreA','scoreB','turnA','turnB','rrA','rrB'];
-COUNTER_IDS.forEach(function(id){ bindCounter(id); });
-
-var addHomeBtn = document.getElementById('addHome');
-if(addHomeBtn){ addHomeBtn.addEventListener('click', function(){ addToken('home'); }); }
-
-var addAwayBtn = document.getElementById('addAway');
-if(addAwayBtn){ addAwayBtn.addEventListener('click', function(){ addToken('away'); }); }
-
-var endTurnBtn = document.getElementById('endTurn');
-if(endTurnBtn){ endTurnBtn.addEventListener('click', doEndTurn); }
-
-// Initial
-loadLS();
-updateActiveUI();
-ensureBall(); ensureBallInPark();
+  } catch(e){}
 
 })();
 </script>
