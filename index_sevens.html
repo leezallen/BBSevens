@@ -262,493 +262,1447 @@
   <div id="ctx-sub"></div>
 
 <script>
-(function(){
-  'use strict';
+	(function() {
+    'use strict';
 
-  var SQ = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sq'),10);
-  var COLS = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--cols'),10);
-  var ROWS = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--rows'),10);
+    var SQ = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sq'), 10);
+    var COLS = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--cols'), 10);
+    var ROWS = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--rows'), 10);
+    var STATUS = {
+        IN_PLAY: 0,
+        DOWN: 1,
+        STUNNED: 2,
+        TRAIT: 3
+    };
 
-  // ===== Board drawing =====
-  var boardWrap = document.getElementById('board-wrap');
-  var board = document.getElementById('board');
-  var ctx = board.getContext('2d');
-  var marks = document.getElementById('marks');
-  var mctx = marks.getContext('2d');
 
-  function drawBoard(){
-    var w = COLS * SQ, h = ROWS * SQ;
-    board.width = w; board.height = h; marks.width = w; marks.height = h;
-    ctx.fillStyle = '#12331a'; ctx.fillRect(0,0,w,h);
-    // wide zones
-    ctx.fillStyle = '#1b3d23'; ctx.fillRect(0,0,w,SQ*2); ctx.fillRect(0,h-SQ*2,w,SQ*2);
-    // TD zones
-    ctx.fillStyle = '#1d4ed8'; ctx.fillRect(0,0,SQ,h);
-    ctx.fillStyle = '#b91c1c'; ctx.fillRect(w-SQ,0,SQ,h);
-    // grid
-    ctx.strokeStyle = '#ffffff22'; ctx.lineWidth = 1;
-    for(var gx=0;gx<=COLS;gx++){ ctx.beginPath(); ctx.moveTo(gx*SQ+0.5,0); ctx.lineTo(gx*SQ+0.5,h); ctx.stroke(); }
-    for(var gy=0;gy<=ROWS;gy++){ ctx.beginPath(); ctx.moveTo(0,gy*SQ+0.5); ctx.lineTo(w,gy*SQ+0.5); ctx.stroke(); }
-    // section lines at 7 and 13
-    ctx.strokeStyle = '#a78bfa'; ctx.lineWidth = 2;
-    [7,13].forEach(function(c){ ctx.beginPath(); ctx.moveTo(c*SQ+0.5,0); ctx.lineTo(c*SQ+0.5,h); ctx.stroke(); });
-  }
-  drawBoard();
+    // ===== Board drawing =====
+    var boardWrap = document.getElementById('board-wrap');
+    var board = document.getElementById('board');
+    var ctx = board.getContext('2d');
+    var marks = document.getElementById('marks');
+    var mctx = marks.getContext('2d');
 
-  // ===== Square markers (Alt+click) =====
-  var squareMarks = new Set();
-  function redrawMarks(){
-    mctx.clearRect(0,0,marks.width,marks.height);
-    mctx.fillStyle = '#10b98188';
-    squareMarks.forEach(function(key){ var pr = key.split(','); var c = parseInt(pr[0],10), r = parseInt(pr[1],10); mctx.beginPath(); mctx.arc(c*SQ + SQ/2, r*SQ + SQ/2, 6, 0, Math.PI*2); mctx.fill(); });
-  }
-  boardWrap.addEventListener('click', function(e){
-    if(!e.altKey) return;
-    var rect = board.getBoundingClientRect(); var x = e.clientX - rect.left, y = e.clientY - rect.top;
-    if(x<0||y<0||x>rect.width||y>rect.height) return;
-    var col = Math.floor(x / SQ), row = Math.floor(y / SQ); var key = col+','+row;
-    if(squareMarks.has(key)) squareMarks.delete(key); else squareMarks.add(key); redrawMarks(); saveLS();
-  });
-
-  // ===== Scatter overlay (hold X): simple 3x3 =====
-  function drawScatterOverlay(on){
-    if(!on){ redrawMarks(); return; }
-    redrawMarks();
-    var cell = SQ; var size = cell*3; var cx = board.width/2, cy = board.height/2; var left = Math.round(cx - size/2) + 0.5; var top = Math.round(cy - size/2) + 0.5;
-    mctx.save(); mctx.fillStyle = 'rgba(11,18,32,0.70)'; mctx.fillRect(0,0,board.width,board.height);
-    mctx.strokeStyle = '#93c5fd'; mctx.lineWidth = 2; mctx.strokeRect(left, top, size, size);
-    mctx.strokeStyle = '#93c5fd66'; mctx.lineWidth = 1;
-    for(var i=1;i<3;i++){ var vx = left + i*cell; mctx.beginPath(); mctx.moveTo(vx, top); mctx.lineTo(vx, top+size); mctx.stroke(); var vy = top + i*cell; mctx.beginPath(); mctx.moveTo(left, vy); mctx.lineTo(left+size, vy); mctx.stroke(); }
-    var nums = [['1','2','3'],['4','', '5'],['6','7','8']]; mctx.fillStyle = '#cbd5e1'; mctx.font='14px system-ui'; mctx.textAlign='center'; mctx.textBaseline='middle';
-    for(var r=0;r<3;r++){ for(var c=0;c<3;c++){ var t = nums[r][c]; if(!t) continue; var tx = left + c*cell + cell/2; var ty = top + r*cell + cell/2; mctx.fillText(t, tx, ty); } }
-    mctx.restore();
-  }
-  var _xHeld = false;
-  document.addEventListener('keydown', function(e){ var k = e.key||''; if(k.toLowerCase()==='x' && !_xHeld){ _xHeld=true; drawScatterOverlay(true); } });
-  document.addEventListener('keyup', function(e){ var k = e.key||''; if(k.toLowerCase()==='x'){ _xHeld=false; drawScatterOverlay(false); } });
-  window.addEventListener('blur', function(){ if(_xHeld){ _xHeld=false; drawScatterOverlay(false); } });
-
-  // ===== Zones & state =====
-  var zones = { A_RES: document.getElementById('A_RES'), A_KO: document.getElementById('A_KO'), A_CAS: document.getElementById('A_CAS'), B_RES: document.getElementById('B_RES'), B_KO: document.getElementById('B_KO'), B_CAS: document.getElementById('B_CAS'), BALL_PARK: document.getElementById('BALL_PARK') };
-
-  var state = { tokens: [], counters: { scoreA:0, scoreB:0, turnA:0, turnB:0, rrA:0, rrB:0 }, activeTeam:'home', half:1, receivedFirst:'', slot:'default', actions:{ home:{blitz:false,pass:false,handoff:false,foul:false,ttm:false}, away:{blitz:false,pass:false,handoff:false,foul:false,ttm:false} }};
-  var nextId = 1;
-
-  // ===== Save slot (path + ?slot=) =====
-  var PATH_KEY = (location.pathname || '/').replace(/\/+$/,'');
-  var _params = new URLSearchParams(location.search);
-  if(!_params.has('slot')){
-    var remembered = null;
-    try { remembered = localStorage.getItem('bb7s_last_slot:'+PATH_KEY); } catch(e){}
-    if(remembered){ _params.set('slot', remembered); history.replaceState(null,'', location.pathname + '?' + _params.toString()); }
-  }
-  var currentSlot = _params.get('slot') || (function(){ try{ return localStorage.getItem('bb7s_last_slot:'+PATH_KEY) || 'default'; }catch(e){ return 'default'; } })();
-  state.slot = currentSlot;
-  if(!_params.has('slot')){ _params.set('slot', state.slot); history.replaceState(null,'', location.pathname + '?' + _params.toString()); }
-  function saveKey(){ return 'bb7s_state:'+PATH_KEY+':'+state.slot; }
-
-  // ===== Tokens =====
-  function teamCount(team){ var n=0; for(var i=0;i<state.tokens.length;i++) if(state.tokens[i].team===team) n++; return n; }
-
-  function makeTokenDOM(t){
-    var el = document.createElement('div'); el.className = 'token ' + (t.team==='home'?'home': t.team==='away'?'away':'ball'); el.dataset.id = t.id;
-    var ring = document.createElement('div'); ring.className = 'ring ' + (t.role||''); el.appendChild(ring);
-    var lab = document.createElement('div'); lab.className='label'; lab.textContent = t.label; el.appendChild(lab);
-    var stars = document.createElement('div'); stars.className='status-stars'; stars.style.display='none'; el.appendChild(stars);
-    var arrows = document.createElement('div'); arrows.className='status-arrows'; arrows.style.display='none'; ['up','down','left','right'].forEach(function(dir){ var d=document.createElement('div'); d.className='a '+dir; d.textContent='▼'; arrows.appendChild(d); }); el.appendChild(arrows);
-    var qs = document.createElement('div'); qs.className='status-qs'; qs.style.display='none'; ['top','bottom','left','right'].forEach(function(dir){ var d=document.createElement('div'); d.className='q '+dir; d.textContent='？'; qs.appendChild(d); }); el.appendChild(qs);
-    var ballmark = document.createElement('div'); ballmark.className='ballmark'; if(!t.hasBall) ballmark.style.display='none'; el.appendChild(ballmark);
-
-    el.addEventListener('dblclick', function(){ if(t.team==='ball') return; var nv = prompt('Token label:', t.label); if(nv!==null){ t.label = nv; lab.textContent = nv; saveLS(); } });
-    // Right-click menu only; no drag on right click
-    el.addEventListener('contextmenu', function(e){ if(t.team==='ball'){ e.preventDefault(); return; } e.preventDefault(); openCtx(e.clientX, e.clientY, t, el, ring, ballmark, stars, arrows); });
-
-    enableDrag(el);
-    applyStatusVisual(t, el, stars, arrows, qs);
-    if(t.activated) applyActivated(el, true);
-    return el;
-  }
-
-  function applyActivated(el, on){ if(on) el.classList.add('activated'); else el.classList.remove('activated'); }
-  function applyStatusVisual(t, el, stars, arrows, qs){ stars.style.display = (t.status===2)?'block':'none'; arrows.style.display = (t.status===1)?'block':'none'; if(qs) qs.style.display = (t.status===3)?'block':'none'; }
-
-  function mountToken(t){ var el = makeTokenDOM(t); if(t.place==='board'){ boardWrap.appendChild(el); el.style.left = (t.x*SQ + SQ/2)+'px'; el.style.top = (t.y*SQ + SQ/2)+'px'; } else { zones[t.place].appendChild(el); layoutZone(t.place); } }
-
-  function layoutZone(zoneId){ var z = zones[zoneId]; if(!z) return; var tokens = Array.prototype.slice.call(z.querySelectorAll('.token')); var innerPad=12, cell=32; var rect = z.getBoundingClientRect(); var cols = Math.max(1, Math.floor((rect.width - innerPad*2)/cell)); tokens.forEach(function(elm, idx){ var gx = idx%cols, gy=Math.floor(idx/cols); elm.style.left=(innerPad + gx*cell)+'px'; elm.style.top=(innerPad + gy*cell)+'px'; elm.style.transform='translate(0,0)'; elm.style.position='absolute'; }); }
-
-  function addToken(team){ var t = { id:String(nextId++), team:team, label:String(teamCount(team)+1), x:0, y:0, place: team==='home'?'A_RES':'B_RES', status:0, role:'', activated:false, hasBall:false }; state.tokens.push(t); mountToken(t); saveLS(); }
-
-  function ensureBall(){ if(!state.tokens.some(function(t){return t.team==='ball';})){ var t = { id:String(nextId++), team:'ball', label:'⚽', x:0, y:0, place:'BALL_PARK', status:0, role:'', activated:false, hasBall:false }; state.tokens.push(t); mountToken(t); } }
-
-  function ensureStatusNodes(el){ var stars = el.querySelector('.status-stars'); if(!stars){ stars = document.createElement('div'); stars.className='status-stars'; el.appendChild(stars); } var arrows = el.querySelector('.status-arrows'); if(!arrows){ arrows = document.createElement('div'); arrows.className='status-arrows'; ['up','down','left','right'].forEach(function(dir){ var d=document.createElement('div'); d.className='a '+dir; d.textContent='▼'; arrows.appendChild(d); }); el.appendChild(arrows); } var qs = el.querySelector('.status-qs'); if(!qs){ qs = document.createElement('div'); qs.className='status-qs'; ['top','bottom','left','right'].forEach(function(dir){ var d=document.createElement('div'); d.className='q '+dir; d.textContent='？'; qs.appendChild(d); }); el.appendChild(qs); } return {stars:stars, arrows:arrows, qs:qs}; }
-
-  function updateTokenVisual(t){ var el = document.querySelector('.token[data-id="'+t.id+'"]'); if(!el) return; var n = ensureStatusNodes(el); applyStatusVisual(t, el, n.stars, n.arrows, n.qs); applyActivated(el, !!t.activated); }
-
-  function setStatus(t, status){
-    var prev = t.status;
-    t.status = status;
-    updateTokenVisual(t);
-    // Auto-activate only if it's the ACTIVE team's turn
-    if(prev===1 && status===0 && t.team === state.activeTeam){
-      t.activated = true;
-      var el = document.querySelector('.token[data-id="'+t.id+'"]');
-      if(el) applyActivated(el, true);
+    function drawBoard() {
+        var w = COLS * SQ,
+            h = ROWS * SQ;
+        board.width = w;
+        board.height = h;
+        marks.width = w;
+        marks.height = h;
+        ctx.fillStyle = '#12331a';
+        ctx.fillRect(0, 0, w, h);
+        // wide zones
+        ctx.fillStyle = '#1b3d23';
+        ctx.fillRect(0, 0, w, SQ * 2);
+        ctx.fillRect(0, h - SQ * 2, w, SQ * 2);
+        // TD zones
+        ctx.fillStyle = '#1d4ed8';
+        ctx.fillRect(0, 0, SQ, h);
+        ctx.fillStyle = '#b91c1c';
+        ctx.fillRect(w - SQ, 0, SQ, h);
+        // grid
+        ctx.strokeStyle = '#ffffff22';
+        ctx.lineWidth = 1;
+        for (var gx = 0; gx <= COLS; gx++) {
+            ctx.beginPath();
+            ctx.moveTo(gx * SQ + 0.5, 0);
+            ctx.lineTo(gx * SQ + 0.5, h);
+            ctx.stroke();
+        }
+        for (var gy = 0; gy <= ROWS; gy++) {
+            ctx.beginPath();
+            ctx.moveTo(0, gy * SQ + 0.5);
+            ctx.lineTo(w, gy * SQ + 0.5);
+            ctx.stroke();
+        }
+        // section lines at 7 and 13
+        ctx.strokeStyle = '#a78bfa';
+        ctx.lineWidth = 2;
+        [7, 13].forEach(function(c) {
+            ctx.beginPath();
+            ctx.moveTo(c * SQ + 0.5, 0);
+            ctx.lineTo(c * SQ + 0.5, h);
+            ctx.stroke();
+        });
     }
-  }
+    drawBoard();
 
-  // Team end-turn: only for that team — ✦ -> ▼ and clear Activated
-  function teamEndTurn(team){ state.tokens.forEach(function(t){ if(t.team===team){ if(t.status===2) t.status=1; if(t.activated) t.activated=false; updateTokenVisual(t); } }); saveLS(); }
+    // ===== Square markers (Alt+click) =====
+    var squareMarks = new Set();
 
-  // Active team UI
-  function otherTeam(team){ return team==='home'?'away':'home'; }
-  function updateActiveUI(){ var homeScore = document.getElementById('scoreA'); var awayScore = document.getElementById('scoreB'); homeScore.classList.toggle('active', state.activeTeam==='home'); awayScore.classList.toggle('active', state.activeTeam==='away'); var btn = document.getElementById('endTurn'); btn.textContent = 'End Turn (' + (state.activeTeam==='home'?'Home → Away':'Away → Home') + ')'; btn.classList.add('pulse'); setTimeout(function(){ btn.classList.remove('pulse'); }, 600); refreshActionsUI(); }
-  function doEndTurn(){ var current = state.activeTeam; teamEndTurn(current); var next = otherTeam(current); state.activeTeam = next; if(next==='home'){ state.counters.turnA = (state.counters.turnA||0)+1; document.querySelector('#turnA .val').textContent = state.counters.turnA; } else { state.counters.turnB = (state.counters.turnB||0)+1; document.querySelector('#turnB .val').textContent = state.counters.turnB; } state.actions.home = {blitz:false,pass:false,handoff:false,foul:false,ttm:false};
-  state.actions.away = {blitz:false,pass:false,handoff:false,foul:false,ttm:false};
-  updateActiveUI(); refreshActionsUI(); saveLS(); }
+    function redrawMarks() {
+        mctx.clearRect(0, 0, marks.width, marks.height);
+        mctx.fillStyle = '#10b98188';
+        squareMarks.forEach(function(key) {
+            var pr = key.split(',');
+            var c = parseInt(pr[0], 10),
+                r = parseInt(pr[1], 10);
+            mctx.beginPath();
+            mctx.arc(c * SQ + SQ / 2, r * SQ + SQ / 2, 6, 0, Math.PI * 2);
+            mctx.fill();
+        });
+    }
+    boardWrap.addEventListener('click', function(e) {
+        if (!e.altKey) return;
+        var rect = board.getBoundingClientRect();
+        var x = e.clientX - rect.left,
+            y = e.clientY - rect.top;
+        if (x < 0 || y < 0 || x > rect.width || y > rect.height) return;
+        var col = Math.floor(x / SQ),
+            row = Math.floor(y / SQ);
+        var key = col + ',' + row;
+        if (squareMarks.has(key)) squareMarks.delete(key);
+        else squareMarks.add(key);
+        redrawMarks();
+        saveLS();
+    });
 
-  // Dragging & snapping — left click only
-  var dragging=null, origin=null; var rel={dx:0,dy:0};
-  function enableDrag(elm){ var moved=false, startX=0, startY=0; elm.addEventListener('pointerdown', function(e){ if(e.pointerType!=='touch' && e.button!==0) return; moved=false; startX=e.clientX; startY=e.clientY; dragging=elm; elm.setPointerCapture(e.pointerId); rel.dx = elm.offsetWidth/2; rel.dy = elm.offsetHeight/2; var parent = elm.parentElement===boardWrap ? boardWrap : elm.parentElement; var p = parent.getBoundingClientRect(); elm.style.position='absolute'; elm.style.left=(e.clientX - p.left - rel.dx)+'px'; elm.style.top=(e.clientY - p.top - rel.dy)+'px'; var t = getToken(elm); origin = { place:t.place, x:t.x, y:t.y, parent: elm.parentElement }; }); elm.addEventListener('pointermove', function(e){ if(!dragging) return; var parent = dragging.parentElement===boardWrap ? boardWrap : dragging.parentElement; var p = parent.getBoundingClientRect(); dragging.style.left=(e.clientX - p.left - rel.dx)+'px'; dragging.style.top=(e.clientY - p.top - rel.dy)+'px'; if(!moved && (Math.abs(e.clientX-startX)>3 || Math.abs(e.clientY-startY)>3)) moved=true; }); elm.addEventListener('pointerup', function(e){ if(!dragging) return; var el2=dragging; dragging.releasePointerCapture(e.pointerId); dragging=null; var ok = drop(el2, e.clientX, e.clientY); if(moved) el2._suppressClick = true; if(ok){ var t = getToken(el2); if(t && (t.team==='home'||t.team==='away')){ var movedSquares = (origin && origin.place==='board' && t.place==='board' && (t.x!==origin.x || t.y!==origin.y)); if(movedSquares && t.team === state.activeTeam && !t.activated){ t.activated=true; applyActivated(el2,true); } } } else { var t2 = getToken(el2); if(origin.place==='board'){ if(el2.parentElement!==boardWrap){ if(el2.parentElement) el2.parentElement.removeChild(el2); boardWrap.appendChild(el2); } el2.style.left=(origin.x*SQ + SQ/2)+'px'; el2.style.top=(origin.y*SQ + SQ/2)+'px'; el2.style.transform='translate(-50%,-50%)'; t2.place='board'; t2.x=origin.x; t2.y=origin.y; } else { var z = zones[origin.place]; if(el2.parentElement!==z){ if(el2.parentElement) el2.parentElement.removeChild(el2); z.appendChild(el2); } t2.place = origin.place; layoutZone(origin.place); } } saveLS(); }); }
+    // ===== Scatter overlay (hold X): simple 3x3 =====
+    function drawScatterOverlay(on) {
+        if (!on) {
+            redrawMarks();
+            return;
+        }
+        redrawMarks();
+        var cell = SQ;
+        var size = cell * 3;
+        var cx = board.width / 2,
+            cy = board.height / 2;
+        var left = Math.round(cx - size / 2) + 0.5;
+        var top = Math.round(cy - size / 2) + 0.5;
+        mctx.save();
+        mctx.fillStyle = 'rgba(11,18,32,0.70)';
+        mctx.fillRect(0, 0, board.width, board.height);
+        mctx.strokeStyle = '#93c5fd';
+        mctx.lineWidth = 2;
+        mctx.strokeRect(left, top, size, size);
+        mctx.strokeStyle = '#93c5fd66';
+        mctx.lineWidth = 1;
+        for (var i = 1; i < 3; i++) {
+            var vx = left + i * cell;
+            mctx.beginPath();
+            mctx.moveTo(vx, top);
+            mctx.lineTo(vx, top + size);
+            mctx.stroke();
+            var vy = top + i * cell;
+            mctx.beginPath();
+            mctx.moveTo(left, vy);
+            mctx.lineTo(left + size, vy);
+            mctx.stroke();
+        }
+        var nums = [
+            ['1', '2', '3'],
+            ['4', '', '5'],
+            ['6', '7', '8']
+        ];
+        mctx.fillStyle = '#cbd5e1';
+        mctx.font = '14px system-ui';
+        mctx.textAlign = 'center';
+        mctx.textBaseline = 'middle';
+        for (var r = 0; r < 3; r++) {
+            for (var c = 0; c < 3; c++) {
+                var t = nums[r][c];
+                if (!t) continue;
+                var tx = left + c * cell + cell / 2;
+                var ty = top + r * cell + cell / 2;
+                mctx.fillText(t, tx, ty);
+            }
+        }
+        mctx.restore();
+    }
+    var _xHeld = false;
+    document.addEventListener('keydown', function(e) {
+        var k = e.key || '';
+        if (k.toLowerCase() === 'x' && !_xHeld) {
+            _xHeld = true;
+            drawScatterOverlay(true);
+        }
+    });
+    document.addEventListener('keyup', function(e) {
+        var k = e.key || '';
+        if (k.toLowerCase() === 'x') {
+            _xHeld = false;
+            drawScatterOverlay(false);
+        }
+    });
+    window.addEventListener('blur', function() {
+        if (_xHeld) {
+            _xHeld = false;
+            drawScatterOverlay(false);
+        }
+    });
 
-  function tokenAt(col, row, excludeId){ for(var i=0;i<state.tokens.length;i++){ var t = state.tokens[i]; if(t.place==='board' && t.x===col && t.y===row && t.id!==excludeId){ return t; } } return null; }
-  function scrubToken(t){
-    var hadBall = !!t.hasBall;
-    // Clear statuses
-    t.status = 0;
-    t.activated = false;
-    // Ensure any visible ball icon on the token is removed too
-    setPlayerHasBall(t, false);
-	t.x = -1; 
-	t.y = -1; 
-    // Refresh visuals
-    updateTokenVisual(t);
-    // Park the loose ball icon if the player had it
-    if(hadBall) ensureBallInPark();
-  }
-  
-  function sendToZone(t, zoneId){
-  var wasOnBoard = (t.place === 'board');
-  var bx = t.x, by = t.y;
-  var hadBall = !!t.hasBall;
+    // ===== Zones & state =====
+    var zones = {
+        A_RES: document.getElementById('A_RES'),
+        A_KO: document.getElementById('A_KO'),
+        A_CAS: document.getElementById('A_CAS'),
+        B_RES: document.getElementById('B_RES'),
+        B_KO: document.getElementById('B_KO'),
+        B_CAS: document.getElementById('B_CAS'),
+        BALL_PARK: document.getElementById('BALL_PARK')
+    };
 
-  scrubToken(t);  // this clears ball & parks it, statuses, etc.
+    var state = {
+        tokens: [],
+        counters: {
+            scoreA: 0,
+            scoreB: 0,
+            turnA: 0,
+            turnB: 0,
+            rrA: 0,
+            rrB: 0
+        },
+        activeTeam: 'home',
+        half: 1,
+        receivedFirst: '',
+        slot: 'default',
+        actions: {
+            home: {
+                blitz: false,
+                pass: false,
+                handoff: false,
+                foul: false,
+                ttm: false
+            },
+            away: {
+                blitz: false,
+                pass: false,
+                handoff: false,
+                foul: false,
+                ttm: false
+            }
+        }
+    };
+    var nextId = 1;
 
-  var el = document.querySelector('.token[data-id="'+t.id+'"]');
-  var z  = zones[zoneId];
-  if(!z || !el) return;
+    // ===== Save slot (path + ?slot=) =====
+    var PATH_KEY = (location.pathname || '/').replace(/\/+$/, '');
+    var _params = new URLSearchParams(location.search);
+    if (!_params.has('slot')) {
+        var remembered = null;
+        try {
+            remembered = localStorage.getItem('bb7s_last_slot:' + PATH_KEY);
+        } catch (e) {}
+        if (remembered) {
+            _params.set('slot', remembered);
+            history.replaceState(null, '', location.pathname + '?' + _params.toString());
+        }
+    }
+    var currentSlot = _params.get('slot') || (function() {
+        try {
+            return localStorage.getItem('bb7s_last_slot:' + PATH_KEY) || 'default';
+        } catch (e) {
+            return 'default';
+        }
+    })();
+    state.slot = currentSlot;
+    if (!_params.has('slot')) {
+        _params.set('slot', state.slot);
+        history.replaceState(null, '', location.pathname + '?' + _params.toString());
+    }
 
-  if(el.parentElement !== z){
-    if(el.parentElement) el.parentElement.removeChild(el);
-    z.appendChild(el);
-  }
+    function saveKey() {
+        return 'bb7s_state:' + PATH_KEY + ':' + state.slot;
+    }
 
-  t.place = zoneId;
-  t.x = -1; t.y = -1;       // clear stale board coords
-  layoutZone(zoneId);
+    // ===== Tokens =====
+    function teamCount(team) {
+        var n = 0;
+        for (var i = 0; i < state.tokens.length; i++)
+            if (state.tokens[i].team === team) n++;
+        return n;
+    }
 
-  if(wasOnBoard && hadBall){
-    placeLooseBallAt(bx, by);   // drop ball on the square they left
-  }
+    function makeTokenDOM(t) {
+        var el = document.createElement('div');
+        el.className = 'token ' + (t.team === 'home' ? 'home' : t.team === 'away' ? 'away' : 'ball');
+        el.dataset.id = t.id;
+        var ring = document.createElement('div');
+        ring.className = 'ring ' + (t.role || '');
+        el.appendChild(ring);
+        var lab = document.createElement('div');
+        lab.className = 'label';
+        lab.textContent = t.label;
+        el.appendChild(lab);
+        var stars = document.createElement('div');
+        stars.className = 'status-stars';
+        stars.style.display = 'none';
+        el.appendChild(stars);
+        var arrows = document.createElement('div');
+        arrows.className = 'status-arrows';
+        arrows.style.display = 'none';
+        ['up', 'down', 'left', 'right'].forEach(function(dir) {
+            var d = document.createElement('div');
+            d.className = 'a ' + dir;
+            d.textContent = '▼';
+            arrows.appendChild(d);
+        });
+        el.appendChild(arrows);
+        var qs = document.createElement('div');
+        qs.className = 'status-qs';
+        qs.style.display = 'none';
+        ['top', 'bottom', 'left', 'right'].forEach(function(dir) {
+            var d = document.createElement('div');
+            d.className = 'q ' + dir;
+            d.textContent = '？';
+            qs.appendChild(d);
+        });
+        el.appendChild(qs);
+        var ballmark = document.createElement('div');
+        ballmark.className = 'ballmark';
+        if (!t.hasBall) ballmark.style.display = 'none';
+        el.appendChild(ballmark);
 
-  saveLS();
-}
+        el.addEventListener('dblclick', function() {
+            if (t.team === 'ball') return;
+            var nv = prompt('Token label:', t.label);
+            if (nv !== null) {
+                t.label = nv;
+                lab.textContent = nv;
+                saveLS();
+            }
+        });
+        // Right-click menu only; no drag on right click
+        el.addEventListener('contextmenu', function(e) {
+            if (t.team === 'ball') {
+                e.preventDefault();
+                return;
+            }
+            e.preventDefault();
+            openCtx(e.clientX, e.clientY, t, el, ring, ballmark, stars, arrows);
+        });
+
+        enableDrag(el);
+        applyStatusVisual(t, el, stars, arrows, qs);
+        if (t.activated) applyActivated(el, true);
+        return el;
+    }
+
+    function applyActivated(el, on) {
+        if (on) el.classList.add('activated');
+        else el.classList.remove('activated');
+    }
+
+    function applyStatusVisual(t, el, stars, arrows, qs){
+      var s = Number(t.status)|0;
+      stars.style.display  = (s === STATUS.STUNNED) ? 'block' : 'none';
+      arrows.style.display = (s === STATUS.DOWN)    ? 'block' : 'none';
+      if (qs) qs.style.display = (s === STATUS.TRAIT) ? 'block' : 'none';
+    }
+
+    function mountToken(t) {
+        var el = makeTokenDOM(t);
+        if (t.place === 'board') {
+            boardWrap.appendChild(el);
+            el.style.left = (t.x * SQ + SQ / 2) + 'px';
+            el.style.top = (t.y * SQ + SQ / 2) + 'px';
+        } else {
+            zones[t.place].appendChild(el);
+            layoutZone(t.place);
+        }
+    }
+
+    function layoutZone(zoneId) {
+        var z = zones[zoneId];
+        if (!z) return;
+        var tokens = Array.prototype.slice.call(z.querySelectorAll('.token'));
+        var innerPad = 12,
+            cell = 32;
+        var rect = z.getBoundingClientRect();
+        var cols = Math.max(1, Math.floor((rect.width - innerPad * 2) / cell));
+        tokens.forEach(function(elm, idx) {
+            var gx = idx % cols,
+                gy = Math.floor(idx / cols);
+            elm.style.left = (innerPad + gx * cell) + 'px';
+            elm.style.top = (innerPad + gy * cell) + 'px';
+            elm.style.transform = 'translate(0,0)';
+            elm.style.position = 'absolute';
+        });
+    }
+
+    function addToken(team) {
+        var t = {
+            id: String(nextId++),
+            team: team,
+            label: String(teamCount(team) + 1),
+            x: 0,
+            y: 0,
+            place: team === 'home' ? 'A_RES' : 'B_RES',
+            status: 0,
+            role: '',
+            activated: false,
+            hasBall: false
+        };
+        state.tokens.push(t);
+        mountToken(t);
+        saveLS();
+    }
+
+    function ensureBall() {
+        if (!state.tokens.some(function(t) {
+                return t.team === 'ball';
+            })) {
+            var t = {
+                id: String(nextId++),
+                team: 'ball',
+                label: '⚽',
+                x: 0,
+                y: 0,
+                place: 'BALL_PARK',
+                status: 0,
+                role: '',
+                activated: false,
+                hasBall: false
+            };
+            state.tokens.push(t);
+            mountToken(t);
+        }
+    }
+
+    function ensureStatusNodes(el) {
+        var stars = el.querySelector('.status-stars');
+        if (!stars) {
+            stars = document.createElement('div');
+            stars.className = 'status-stars';
+            el.appendChild(stars);
+        }
+        var arrows = el.querySelector('.status-arrows');
+        if (!arrows) {
+            arrows = document.createElement('div');
+            arrows.className = 'status-arrows';
+            ['up', 'down', 'left', 'right'].forEach(function(dir) {
+                var d = document.createElement('div');
+                d.className = 'a ' + dir;
+                d.textContent = '▼';
+                arrows.appendChild(d);
+            });
+            el.appendChild(arrows);
+        }
+        var qs = el.querySelector('.status-qs');
+        if (!qs) {
+            qs = document.createElement('div');
+            qs.className = 'status-qs';
+            ['top', 'bottom', 'left', 'right'].forEach(function(dir) {
+                var d = document.createElement('div');
+                d.className = 'q ' + dir;
+                d.textContent = '？';
+                qs.appendChild(d);
+            });
+            el.appendChild(qs);
+        }
+        return {
+            stars: stars,
+            arrows: arrows,
+            qs: qs
+        };
+    }
+
+    function updateTokenVisual(t) {
+        var el = document.querySelector('.token[data-id="' + t.id + '"]');
+        if (!el) return;
+        var n = ensureStatusNodes(el);
+        applyStatusVisual(t, el, n.stars, n.arrows, n.qs);
+        applyActivated(el, !!t.activated);
+    }
+
+    function setStatus(t, status){
+      var prev = Number(t.status);
+      var next = Number(status);
+      if (next !== 0 && next !== 1 && next !== 2 && next !== 3) next = 0;
+
+      t.status = next; // store as NUMBER
+
+      // Decide auto-activation before drawing
+      var autoActivate =
+        prev === STATUS.DOWN &&
+        next === STATUS.IN_PLAY &&
+        t.team === state.activeTeam &&
+        t.place === 'board';
+
+      if (autoActivate) {
+        t.activated = true;
+      }
+
+      // Single redraw uses both t.status and t.activated
+      updateTokenVisual(t);
+    }
 
 
-function drop(elm, cx, cy){
-  var b = board.getBoundingClientRect();
-  var t = getToken(elm);
+    function teamEndTurn(team){
+      state.tokens.forEach(function(t){
+        if (t.team === team && t.place === 'board'){
+          if (t.status === STATUS.STUNNED){
+            setStatus(t, STATUS.DOWN);  // only STUNNED -> DOWN
+          }
+          t.activated = false;          // clear activation for that team
+          updateTokenVisual(t);
+        }
+      });
+      saveLS();
+    }
 
-  // ===== Dropped on the board =====
-  if (cx>=b.left && cx<=b.right && cy>=b.top && cy<=b.bottom){
-    var x = cx - b.left, y = cy - b.top;
-    var col = Math.round(x / SQ - 0.5), row = Math.round(y / SQ - 0.5);
-    if(col<0) col=0; if(col>COLS-1) col=COLS-1;
-    if(row<0) row=0; if(row>ROWS-1) row=ROWS-1;
+    // Active team UI
+    function otherTeam(team) {
+        return team === 'home' ? 'away' : 'home';
+    }
 
-    var occ = tokenAt(col,row, t.id);
+    function updateActiveUI() {
+        var homeScore = document.getElementById('scoreA');
+        var awayScore = document.getElementById('scoreB');
+        homeScore.classList.toggle('active', state.activeTeam === 'home');
+        awayScore.classList.toggle('active', state.activeTeam === 'away');
+        var btn = document.getElementById('endTurn');
+        btn.textContent = 'End Turn (' + (state.activeTeam === 'home' ? 'Home → Away' : 'Away → Home') + ')';
+        btn.classList.add('pulse');
+        setTimeout(function() {
+            btn.classList.remove('pulse');
+        }, 600);
+        refreshActionsUI();
+    }
 
-    // Ball token logic
-    if (t.team === 'ball'){
-      // Ball onto a player → give possession and park icon
-      if (occ && (occ.team==='home' || occ.team==='away')){
-        giveBallToPlayer(occ);
+    function doEndTurn() {
+        var current = state.activeTeam;
+        teamEndTurn(current);
+        var next = otherTeam(current);
+        state.activeTeam = next;
+        if (next === 'home') {
+            state.counters.turnA = (state.counters.turnA || 0) + 1;
+            document.querySelector('#turnA .val').textContent = state.counters.turnA;
+        } else {
+            state.counters.turnB = (state.counters.turnB || 0) + 1;
+            document.querySelector('#turnB .val').textContent = state.counters.turnB;
+        }
+        state.actions.home = {
+            blitz: false,
+            pass: false,
+            handoff: false,
+            foul: false,
+            ttm: false
+        };
+        state.actions.away = {
+            blitz: false,
+            pass: false,
+            handoff: false,
+            foul: false,
+            ttm: false
+        };
+        updateActiveUI();
+        refreshActionsUI();
+        saveLS();
+    }
+
+    // Dragging & snapping — left click only
+    var dragging = null,
+        origin = null;
+    var rel = {
+        dx: 0,
+        dy: 0
+    };
+
+    function enableDrag(elm) {
+        var moved = false,
+            startX = 0,
+            startY = 0;
+        elm.addEventListener('pointerdown', function(e) {
+            if (e.pointerType !== 'touch' && e.button !== 0) return;
+            moved = false;
+            startX = e.clientX;
+            startY = e.clientY;
+            dragging = elm;
+            elm.setPointerCapture(e.pointerId);
+            rel.dx = elm.offsetWidth / 2;
+            rel.dy = elm.offsetHeight / 2;
+            var parent = elm.parentElement === boardWrap ? boardWrap : elm.parentElement;
+            var p = parent.getBoundingClientRect();
+            elm.style.position = 'absolute';
+            elm.style.left = (e.clientX - p.left - rel.dx) + 'px';
+            elm.style.top = (e.clientY - p.top - rel.dy) + 'px';
+            var t = getToken(elm);
+            origin = {
+                place: t.place,
+                x: t.x,
+                y: t.y,
+                parent: elm.parentElement
+            };
+        });
+        elm.addEventListener('pointermove', function(e) {
+            if (!dragging) return;
+            var parent = dragging.parentElement === boardWrap ? boardWrap : dragging.parentElement;
+            var p = parent.getBoundingClientRect();
+            dragging.style.left = (e.clientX - p.left - rel.dx) + 'px';
+            dragging.style.top = (e.clientY - p.top - rel.dy) + 'px';
+            if (!moved && (Math.abs(e.clientX - startX) > 3 || Math.abs(e.clientY - startY) > 3)) moved = true;
+        });
+        elm.addEventListener('pointerup', function(e) {
+            if (!dragging) return;
+            var el2 = dragging;
+            dragging.releasePointerCapture(e.pointerId);
+            dragging = null;
+            var ok = drop(el2, e.clientX, e.clientY);
+            if (moved) el2._suppressClick = true;
+            if (ok) {
+                var t = getToken(el2);
+                if (t && (t.team === 'home' || t.team === 'away')) {
+                    var movedSquares = (origin && origin.place === 'board' && t.place === 'board' && (t.x !== origin.x || t.y !== origin.y));
+                    if (movedSquares && t.team === state.activeTeam && !t.activated) {
+                        t.activated = true;
+                        applyActivated(el2, true);
+                    }
+                }
+            } else {
+                var t2 = getToken(el2);
+                if (origin.place === 'board') {
+                    if (el2.parentElement !== boardWrap) {
+                        if (el2.parentElement) el2.parentElement.removeChild(el2);
+                        boardWrap.appendChild(el2);
+                    }
+                    el2.style.left = (origin.x * SQ + SQ / 2) + 'px';
+                    el2.style.top = (origin.y * SQ + SQ / 2) + 'px';
+                    el2.style.transform = 'translate(-50%,-50%)';
+                    t2.place = 'board';
+                    t2.x = origin.x;
+                    t2.y = origin.y;
+                } else {
+                    var z = zones[origin.place];
+                    if (el2.parentElement !== z) {
+                        if (el2.parentElement) el2.parentElement.removeChild(el2);
+                        z.appendChild(el2);
+                    }
+                    t2.place = origin.place;
+                    layoutZone(origin.place);
+                }
+            }
+            saveLS();
+        });
+    }
+
+    function tokenAt(col, row, excludeId) {
+        for (var i = 0; i < state.tokens.length; i++) {
+            var t = state.tokens[i];
+            if (t.place === 'board' && t.x === col && t.y === row && t.id !== excludeId) {
+                return t;
+            }
+        }
+        return null;
+    }
+
+    function scrubToken(t) {
+        var hadBall = !!t.hasBall;
+        // Clear statuses
+        t.status = 0;
+        t.activated = false;
+        // Ensure any visible ball icon on the token is removed too
+        setPlayerHasBall(t, false);
+        t.x = -1;
+        t.y = -1;
+        // Refresh visuals
+        updateTokenVisual(t);
+        // Park the loose ball icon if the player had it
+        if (hadBall) ensureBallInPark();
+    }
+
+    function sendToZone(t, zoneId) {
+        var wasOnBoard = (t.place === 'board');
+        var bx = t.x,
+            by = t.y;
+        var hadBall = !!t.hasBall;
+
+        scrubToken(t); // this clears ball & parks it, statuses, etc.
+
+        var el = document.querySelector('.token[data-id="' + t.id + '"]');
+        var z = zones[zoneId];
+        if (!z || !el) return;
+
+        if (el.parentElement !== z) {
+            if (el.parentElement) el.parentElement.removeChild(el);
+            z.appendChild(el);
+        }
+
+        t.place = zoneId;
+        t.x = -1;
+        t.y = -1; // clear stale board coords
+        layoutZone(zoneId);
+
+        if (wasOnBoard && hadBall) {
+            placeLooseBallAt(bx, by); // drop ball on the square they left
+        }
+
+        saveLS();
+    }
+
+
+    function drop(elm, cx, cy) {
+        var b = board.getBoundingClientRect();
+        var t = getToken(elm);
+
+        // ===== Dropped on the board =====
+        if (cx >= b.left && cx <= b.right && cy >= b.top && cy <= b.bottom) {
+            var x = cx - b.left,
+                y = cy - b.top;
+            var col = Math.round(x / SQ - 0.5),
+                row = Math.round(y / SQ - 0.5);
+            if (col < 0) col = 0;
+            if (col > COLS - 1) col = COLS - 1;
+            if (row < 0) row = 0;
+            if (row > ROWS - 1) row = ROWS - 1;
+
+            var occ = tokenAt(col, row, t.id);
+
+            // Ball token logic
+            if (t.team === 'ball') {
+                // Ball onto a player → give possession and park icon
+                if (occ && (occ.team === 'home' || occ.team === 'away')) {
+                    giveBallToPlayer(occ);
+                    ensureBallInPark();
+                    return true;
+                }
+                // Free ball on board
+                if (elm.parentElement !== boardWrap) {
+                    if (elm.parentElement) elm.parentElement.removeChild(elm);
+                    boardWrap.appendChild(elm);
+                }
+                elm.style.left = (col * SQ + SQ / 2) + 'px';
+                elm.style.top = (row * SQ + SQ / 2) + 'px';
+                elm.style.transform = 'translate(-50%, -50%)';
+                t.place = 'board';
+                t.x = col;
+                t.y = row;
+                clearAllPlayerPossessionExcept(null);
+                return true;
+            }
+
+            // Player onto occupied player square → reject drop
+            if (occ && (occ.team === 'home' || occ.team === 'away')) return false;
+
+            // Move player to board
+            if (elm.parentElement !== boardWrap) {
+                if (elm.parentElement) elm.parentElement.removeChild(elm);
+                boardWrap.appendChild(elm);
+            }
+            elm.style.left = (col * SQ + SQ / 2) + 'px';
+            elm.style.top = (row * SQ + SQ / 2) + 'px';
+            elm.style.transform = 'translate(-50%, -50%)';
+            t.place = 'board';
+            t.x = col;
+            t.y = row;
+
+            // If the loose ball icon was here, give it to the mover
+            if (occ && occ.team === 'ball') {
+                giveBallToPlayer(t);
+            }
+            return true;
+        }
+
+        // ===== Dropped into a zone (dugouts / ball park, etc.) =====
+        for (var id in zones) {
+            if (!Object.prototype.hasOwnProperty.call(zones, id)) continue;
+            var z = zones[id];
+            var r = z.getBoundingClientRect();
+            if (cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom) {
+
+                // Move DOM
+                if (elm.parentElement !== z) {
+                    if (elm.parentElement) elm.parentElement.removeChild(elm);
+                    z.appendChild(elm);
+                }
+
+                // Save pre-scrub info about where the player came from
+                var isDugout = /_(RES|KO|CAS)$/.test(id);
+                var fromBoard = (origin && origin.place === 'board');
+                var hadBall = !!t.hasBall;
+                var ox = fromBoard ? origin.x : -1;
+                var oy = fromBoard ? origin.y : -1;
+
+                // Place into zone
+                t.place = id;
+                layoutZone(id);
+
+                // If dragged from the board into a dugout: clear statuses, coords, and drop ball on last square.
+                if (isDugout && fromBoard) {
+                    scrubToken(t); // clears statuses + removes possession (parks the ball icon)
+                    t.x = -1;
+                    t.y = -1; // clear any stale board coords
+
+                    if (hadBall) {
+                        // Put a loose ball on the square they vacated
+                        placeLooseBallAt(ox, oy);
+                    }
+                } else {
+                    // Non-dugout zones (belt & braces): ensure no stale board coords
+                    t.x = -1;
+                    t.y = -1;
+                }
+
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+
+    function getToken(elm) {
+        var id = elm.dataset.id;
+        for (var i = 0; i < state.tokens.length; i++) {
+            if (state.tokens[i].id === id) return state.tokens[i];
+        }
+        return null;
+    }
+
+    // ===== Context menu =====
+    var ctxMenu = document.getElementById('ctx');
+    var ctxSub = document.getElementById('ctx-sub');
+
+    function openCtx(mx, my, t, el, ring, ballmark, stars, arrows) {
+        closeCtx();
+        ctxMenu.innerHTML = '';
+
+        function add(html, handler) {
+            var b = document.createElement('button');
+            b.innerHTML = html;
+            b.addEventListener('click', function() {
+                handler();
+                closeCtx();
+                saveLS();
+            });
+            ctxMenu.appendChild(b);
+        }
+
+        function section(txt) {
+            var d = document.createElement('div');
+            d.className = 'section';
+            d.textContent = txt;
+            ctxMenu.appendChild(d);
+        }
+        section('Status');
+        add('In play (clear markers)', function() {
+            setStatus(t, 0);
+        });
+        add('Down (green arrows)', function() {
+            setStatus(t, 1);
+        });
+        add('Stunned (yellow ✦)', function() {
+            setStatus(t, 2);
+        });
+        add('Trait (purple ?)', function() {
+            setStatus(t, 3);
+        });
+        section('Role ring');
+        var roleBtn = document.createElement('button');
+        roleBtn.textContent = 'Role ring ▸';
+        roleBtn.addEventListener('mouseenter', function() {
+            var subLeft = ctxMenu.getBoundingClientRect().right + 6;
+            openRoleSub(t, ring, subLeft, roleBtn.getBoundingClientRect().top);
+        });
+        roleBtn.addEventListener('click', function() {
+            var subLeft = ctxMenu.getBoundingClientRect().right + 6;
+            openRoleSub(t, ring, subLeft, roleBtn.getBoundingClientRect().top);
+        });
+        ctxMenu.appendChild(roleBtn);
+        section('Send to');
+        var sendBtn = document.createElement('button');
+        sendBtn.textContent = 'Send to ▸';
+        sendBtn.addEventListener('mouseenter', function() {
+            var subLeft = ctxMenu.getBoundingClientRect().right + 6;
+            openSendSub(t, subLeft, sendBtn.getBoundingClientRect().top);
+        });
+        sendBtn.addEventListener('click', function() {
+            var subLeft = ctxMenu.getBoundingClientRect().right + 6;
+            openSendSub(t, subLeft, sendBtn.getBoundingClientRect().top);
+        });
+        ctxMenu.appendChild(sendBtn);
+        section('Ball');
+        add(t.hasBall ? 'Remove ball (to park)' : 'Give ball to this player', function() {
+            if (t.hasBall) {
+                setPlayerHasBall(t, false);
+                ensureBallInPark();
+            } else {
+                giveBallToPlayer(t);
+            }
+        });
+        section('Other');
+        add(t.activated ? 'Unmark activated' : 'Mark activated', function() {
+            t.activated = !t.activated;
+            applyActivated(el, t.activated);
+        });
+        add('<span style="color:#ef4444">Delete token</span>', function() {
+            delToken(t.id);
+        });
+        ctxMenu.style.display = 'block';
+        ctxMenu.style.left = mx + 'px';
+        ctxMenu.style.top = my + 'px';
+        setTimeout(function() {
+            function outsideClick(ev) {
+                if (!ctxMenu.contains(ev.target) && !ctxSub.contains(ev.target)) {
+                    closeCtx();
+                    document.removeEventListener('click', outsideClick);
+                }
+            }
+            document.addEventListener('click', outsideClick);
+        }, 0);
+    }
+
+    function openRoleSub(t, ring, leftPos, top) {
+        ctxSub.innerHTML = '';
+        var roles = ['BLITZER', 'THROWER', 'LINEMAN', 'BLOCKER', 'CATCHER', 'OTHER1', 'OTHER2', '(none)'];
+        roles.forEach(function(rn) {
+            var b = document.createElement('button');
+            b.textContent = rn;
+            b.addEventListener('click', function() {
+                t.role = rn === '(none)' ? '' : rn;
+                ring.className = 'ring ' + (t.role || '');
+                closeCtx();
+                saveLS();
+            });
+            ctxSub.appendChild(b);
+        });
+        ctxSub.style.display = 'block';
+        var cmRect = ctxMenu.getBoundingClientRect();
+        var subRect = ctxSub.getBoundingClientRect();
+        var left = Math.min(leftPos, window.innerWidth - subRect.width - 8);
+        var topPos = Math.max(8, Math.min(Math.max(cmRect.top, top), window.innerHeight - subRect.height - 8));
+        ctxSub.style.left = left + 'px';
+        ctxSub.style.top = topPos + 'px';
+    }
+
+    function openSendSub(t, leftPos, top) {
+        ctxSub.innerHTML = '';
+        var team = t.team === 'home' ? 'A' : 'B';
+        var items = [
+            ["Reserves", team + '_RES'],
+            ["KO'd", team + '_KO'],
+            ["Casualties", team + '_CAS']
+        ];
+        items.forEach(function(it) {
+            var b = document.createElement('button');
+            b.textContent = it[0];
+            b.addEventListener('click', function() {
+                sendToZone(t, it[1]);
+                closeCtx();
+                saveLS();
+            });
+            ctxSub.appendChild(b);
+        });
+        ctxSub.style.display = 'block';
+        var cmRect = ctxMenu.getBoundingClientRect();
+        var subRect = ctxSub.getBoundingClientRect();
+        var left = Math.min(leftPos, window.innerWidth - subRect.width - 8);
+        var topPos = Math.max(8, Math.min(Math.max(cmRect.top, top), window.innerHeight - subRect.height - 8));
+        ctxSub.style.left = left + 'px';
+        ctxSub.style.top = topPos + 'px';
+    }
+
+    function closeCtx() {
+        ctxMenu.style.display = 'none';
+        ctxSub.style.display = 'none';
+    }
+
+    function delToken(id) {
+        for (var i = 0; i < state.tokens.length; i++) {
+            if (state.tokens[i].id === id) {
+                var t = state.tokens[i];
+                var el = document.querySelector('.token[data-id="' + id + '"]');
+                if (el && el.parentElement) el.parentElement.removeChild(el);
+                state.tokens.splice(i, 1);
+                if (t.place && zones[t.place]) layoutZone(t.place);
+                break;
+            }
+        }
+    }
+
+    // ===== Ball helpers & possession =====
+    function setPlayerHasBall(t, has) {
+        t.hasBall = !!has;
+        var el = document.querySelector('.token[data-id="' + t.id + '"]');
+        if (el) {
+            var bm = el.querySelector('.ballmark');
+            if (bm) bm.style.display = has ? 'block' : 'none';
+        }
+    }
+
+    function clearAllPlayerPossessionExcept(exId) {
+        for (var i = 0; i < state.tokens.length; i++) {
+            var p = state.tokens[i];
+            if (p.team === 'home' || p.team === 'away') {
+                if (exId && p.id === exId) continue;
+                if (p.hasBall) setPlayerHasBall(p, false);
+            }
+        }
+    }
+
+    function giveBallToPlayer(t) {
+        clearAllPlayerPossessionExcept(t.id);
+        setPlayerHasBall(t, true);
+        parkBall();
+        saveLS();
+    }
+
+    function parkBall() {
+        var ball = null;
+        for (var i = 0; i < state.tokens.length; i++) {
+            if (state.tokens[i].team === 'ball') {
+                ball = state.tokens[i];
+                break;
+            }
+        }
+        if (!ball) return;
+        var el = document.querySelector('.token[data-id="' + ball.id + '"]');
+        if (el && el.parentElement !== zones.BALL_PARK) {
+            if (el.parentElement) el.parentElement.removeChild(el);
+            zones.BALL_PARK.appendChild(el);
+        }
+        ball.place = 'BALL_PARK';
+        layoutZone('BALL_PARK');
+    }
+
+    function ensureBallInPark() {
+        ensureBall();
+        parkBall();
+    }
+
+    function placeLooseBallAt(col, row) {
+        ensureBall(); // make sure the ball token exists
+        clearAllPlayerPossessionExcept(null);
+
+        var ball = state.tokens.find(function(t) {
+            return t.team === 'ball';
+        });
+        if (!ball) return;
+
+        var el = document.querySelector('.token[data-id="' + ball.id + '"]');
+        if (el && el.parentElement !== boardWrap) {
+            if (el.parentElement) el.parentElement.removeChild(el);
+            boardWrap.appendChild(el);
+        }
+
+        ball.place = 'board';
+        ball.x = col;
+        ball.y = row;
+
+        el.style.left = (col * SQ + SQ / 2) + 'px';
+        el.style.top = (row * SQ + SQ / 2) + 'px';
+        el.style.transform = 'translate(-50%, -50%)';
+    }
+
+    // ===== Persistence (per-path + per-slot) =====
+    function saveLS() {
+        var data = {
+            tokens: state.tokens.map(function(t) {
+                return Object.assign({}, t);
+            }),
+            counters: Object.assign({}, state.counters),
+            nextId: nextId,
+            activeTeam: state.activeTeam,
+            half: state.half,
+            receivedFirst: state.receivedFirst,
+            squareMarks: Array.from(squareMarks),
+            actions: state.actions
+        };
+        try {
+            localStorage.setItem(saveKey(), JSON.stringify(data));
+            localStorage.setItem('bb7s_last_slot:' + PATH_KEY, state.slot);
+        } catch (e) {}
+    }
+
+    function loadLS() {
+        var raw = null;
+        try {
+            raw = localStorage.getItem(saveKey());
+        } catch (e) {}
+        try {
+            document.querySelectorAll('.token').forEach(function(n) {
+                if (n && n.parentElement) n.parentElement.removeChild(n);
+            });
+            state.tokens = [];
+            if (raw) {
+                var data = JSON.parse(raw);
+                Object.assign(state.counters, data.counters || {});
+                state.actions = data.actions || {
+                    home: {
+                        blitz: false,
+                        pass: false,
+                        handoff: false,
+                        foul: false,
+                        ttm: false
+                    },
+                    away: {
+                        blitz: false,
+                        pass: false,
+                        handoff: false,
+                        foul: false,
+                        ttm: false
+                    }
+                };
+                nextId = data.nextId || 1;
+                state.activeTeam = data.activeTeam || 'home';
+                state.half = data.half || 1;
+                state.receivedFirst = data.receivedFirst || '';
+                squareMarks.clear();
+                if (Array.isArray(data.squareMarks)) data.squareMarks.forEach(function(k) {
+                    squareMarks.add(k);
+                });
+                redrawMarks();
+                (data.tokens || []).forEach(function(t) {
+                    state.tokens.push(Object.assign({}, t));
+                    mountToken(t);
+                });
+                // --- Normalize loaded tokens (fix string/invalid statuses, etc.) ---
+                state.tokens.forEach(function(tok){
+                  // Coerce and clamp status to known numeric values
+                  tok.status = Number(tok.status);
+                  if (tok.status !== 0 && tok.status !== 1 && tok.status !== 2 && tok.status !== 3) tok.status = 0;
+
+                  // Only players can have status/activation
+                  tok.activated = !!tok.activated;
+                  if (tok.team !== 'home' && tok.team !== 'away'){
+                    tok.status = 0;
+                    tok.activated = false;
+                  }
+
+                  // Ball should never carry status/activation
+                  if (tok.team === 'ball'){
+                    tok.status = 0;
+                    tok.activated = false;
+                  }
+
+                  // Re-apply visuals now that values are clean
+                  updateTokenVisual(tok);
+                });              	
+            } else {
+                state.counters = {
+                    scoreA: 0,
+                    scoreB: 0,
+                    turnA: 0,
+                    turnB: 0,
+                    rrA: 0,
+                    rrB: 0
+                };
+                nextId = 1;
+                state.activeTeam = 'home';
+                state.half = 1;
+                state.receivedFirst = '';
+                squareMarks.clear();
+                redrawMarks();
+                state.actions = {
+                    home: {
+                        blitz: false,
+                        pass: false,
+                        handoff: false,
+                        foul: false,
+                        ttm: false
+                    },
+                    away: {
+                        blitz: false,
+                        pass: false,
+                        handoff: false,
+                        foul: false,
+                        ttm: false
+                    }
+                };
+            } ['scoreA', 'scoreB', 'turnA', 'turnB', 'rrA', 'rrB'].forEach(function(id) {
+                var el = document.getElementById(id);
+                if (el) {
+                    el.querySelector('.val').textContent = state.counters[id] || 0;
+                }
+            });
+            Object.keys(zones).forEach(layoutZone);
+            ensureBall();
+            ensureBallInPark();
+            updateActiveUI();
+            refreshActionsUI();
+            refreshHalfUI();
+            refreshRecvUI();
+            return !!raw;
+        } catch (err) {
+            console.error(err);
+            return false;
+        }
+    }
+
+    // ===== Header controls (dropdown) =====
+    function resetToBlank() {
+        document.querySelectorAll('.token').forEach(function(n) {
+            if (n && n.parentElement) n.parentElement.removeChild(n);
+        });
+        state.tokens = [];
+        state.counters = {
+            scoreA: 0,
+            scoreB: 0,
+            turnA: 0,
+            turnB: 0,
+            rrA: 0,
+            rrB: 0
+        };
+        nextId = 1;
+        squareMarks.clear();
+        redrawMarks();
+        state.activeTeam = 'home';
+        state.half = 1;
+        state.receivedFirst = '';
+        state.actions = {
+            home: {
+                blitz: false,
+                pass: false,
+                handoff: false,
+                foul: false,
+                ttm: false
+            },
+            away: {
+                blitz: false,
+                pass: false,
+                handoff: false,
+                foul: false,
+                ttm: false
+            }
+        };
+        ['scoreA', 'scoreB', 'turnA', 'turnB', 'rrA', 'rrB'].forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el) {
+                el.querySelector('.val').textContent = state.counters[id];
+            }
+        });
+        ensureBall();
         ensureBallInPark();
-        return true;
-      }
-      // Free ball on board
-      if (elm.parentElement!==boardWrap){ if(elm.parentElement) elm.parentElement.removeChild(elm); boardWrap.appendChild(elm); }
-      elm.style.left = (col*SQ + SQ/2) + 'px';
-      elm.style.top  = (row*SQ + SQ/2) + 'px';
-      elm.style.transform='translate(-50%, -50%)';
-      t.place='board'; t.x=col; t.y=row;
-      clearAllPlayerPossessionExcept(null);
-      return true;
+        updateActiveUI();
+        refreshActionsUI();
+        refreshHalfUI();
+        refreshRecvUI();
     }
 
-    // Player onto occupied player square → reject drop
-    if (occ && (occ.team==='home' || occ.team==='away')) return false;
+    document.getElementById('save').addEventListener('click', function() {
+        saveLS();
+        alert('Saved to browser storage.');
+    });
+    document.getElementById('load').addEventListener('click', function() {
+        if (!loadLS()) alert('No saved state found for this slot.');
+    });
+    document.getElementById('export').addEventListener('click', function() {
+        var data = localStorage.getItem(saveKey()) || '{}';
+        var blob = new Blob([data], {
+            type: 'application/json'
+        });
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        var safeSlot = (state.slot || 'default').replace(/[^a-z0-9_-]+/gi, '-');
+        a.download = 'bb7s_state_' + safeSlot + '.json';
+        a.click();
+        URL.revokeObjectURL(a.href);
+    });
+    document.getElementById('importFile').addEventListener('change', function(e) {
+        var f = e.target.files[0];
+        if (!f) return;
+        var reader = new FileReader();
+        reader.onload = function() {
+            try {
+                localStorage.setItem(saveKey(), reader.result);
+                loadLS();
+                alert('State imported into slot "' + state.slot + '".');
+            } catch (err) {
+                alert('Import failed.');
+            }
+        };
+        reader.readAsText(f);
+    });
+    document.getElementById('reset').addEventListener('click', function() {
+        if (!confirm('Clear the board and reset this slot?')) return;
+        try {
+            localStorage.removeItem(saveKey());
+        } catch (e) {}
+        resetToBlank();
+        saveLS();
+    });
 
-    // Move player to board
-    if (elm.parentElement!==boardWrap){ if(elm.parentElement) elm.parentElement.removeChild(elm); boardWrap.appendChild(elm); }
-    elm.style.left = (col*SQ + SQ/2) + 'px';
-    elm.style.top  = (row*SQ + SQ/2) + 'px';
-    elm.style.transform='translate(-50%, -50%)';
-    t.place='board'; t.x=col; t.y=row;
-
-    // If the loose ball icon was here, give it to the mover
-    if (occ && occ.team==='ball'){ giveBallToPlayer(t); }
-    return true;
-  }
-
-  // ===== Dropped into a zone (dugouts / ball park, etc.) =====
-  for (var id in zones){
-    if(!Object.prototype.hasOwnProperty.call(zones,id)) continue;
-    var z = zones[id];
-    var r = z.getBoundingClientRect();
-    if (cx>=r.left && cx<=r.right && cy>=r.top && cy<=r.bottom){
-
-      // Move DOM
-      if (elm.parentElement!==z){ if(elm.parentElement) elm.parentElement.removeChild(elm); z.appendChild(elm); }
-
-      // Save pre-scrub info about where the player came from
-      var isDugout = /_(RES|KO|CAS)$/.test(id);
-      var fromBoard = (origin && origin.place==='board');
-      var hadBall   = !!t.hasBall;
-      var ox = fromBoard ? origin.x : -1;
-      var oy = fromBoard ? origin.y : -1;
-
-      // Place into zone
-      t.place = id;
-      layoutZone(id);
-
-      // If dragged from the board into a dugout: clear statuses, coords, and drop ball on last square.
-      if (isDugout && fromBoard){
-        scrubToken(t);          // clears statuses + removes possession (parks the ball icon)
-        t.x = -1; t.y = -1;     // clear any stale board coords
-
-        if (hadBall){
-          // Put a loose ball on the square they vacated
-          placeLooseBallAt(ox, oy);
+    // Dropdown open/close
+    var menuBtn = document.getElementById('menuSaves');
+    var menu = document.getElementById('menuDropdown');
+    menuBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var open = menu.classList.toggle('show');
+        menuBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+    document.addEventListener('click', function(e) {
+        if (!menu.contains(e.target) && e.target !== menuBtn) {
+            menu.classList.remove('show');
+            menuBtn.setAttribute('aria-expanded', 'false');
         }
-      } else {
-        // Non-dugout zones (belt & braces): ensure no stale board coords
-        t.x = -1; t.y = -1;
-      }
+    });
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            menu.classList.remove('show');
+            menuBtn.setAttribute('aria-expanded', 'false');
+        }
+    });
 
-      return true;
+    // Right panel toggles
+    function refreshHalfUI() {
+        var h1 = document.getElementById('half1');
+        var h2 = document.getElementById('half2');
+        var isFirst = (state.half === 1);
+        h1.classList.toggle('active', isFirst);
+        h2.classList.toggle('active', !isFirst);
+        h1.setAttribute('aria-pressed', isFirst ? 'true' : 'false');
+        h2.setAttribute('aria-pressed', !isFirst ? 'true' : 'false');
     }
-  }
-
-  return false;
-}
 
 
-  function getToken(elm){ var id = elm.dataset.id; for(var i=0;i<state.tokens.length;i++){ if(state.tokens[i].id===id) return state.tokens[i]; } return null; }
+    // Actions UI (per active team)
+    function refreshActionsUI() {
+        var scope = state.actions[state.activeTeam] || {
+            blitz: false,
+            pass: false,
+            handoff: false,
+            foul: false,
+            ttm: false
+        };
+        document.querySelectorAll('#turnActions .action').forEach(function(btn) {
+            var key = btn.getAttribute('data-act');
+            btn.classList.toggle('active', !!scope[key]);
+            btn.setAttribute('aria-pressed', (!!scope[key]) ? 'true' : 'false');
+        });
+    }
+    document.addEventListener('click', function(e) {
+        var btn = e.target.closest('#turnActions .action');
+        if (!btn) return;
+        var key = btn.getAttribute('data-act');
+        var scope = state.actions[state.activeTeam];
+        scope[key] = !scope[key];
+        btn.classList.toggle('active', scope[key]);
+        btn.setAttribute('aria-pressed', scope[key] ? 'true' : 'false');
+        saveLS();
+    });
 
-  // ===== Context menu =====
-  var ctxMenu = document.getElementById('ctx'); var ctxSub = document.getElementById('ctx-sub');
-  function openCtx(mx,my,t, el, ring, ballmark, stars, arrows){ closeCtx(); ctxMenu.innerHTML=''; function add(html, handler){ var b=document.createElement('button'); b.innerHTML=html; b.addEventListener('click', function(){ handler(); closeCtx(); saveLS(); }); ctxMenu.appendChild(b); } function section(txt){ var d=document.createElement('div'); d.className='section'; d.textContent=txt; ctxMenu.appendChild(d); }
-    section('Status'); add('In play (clear markers)', function(){ setStatus(t,0); }); add('Down (green arrows)', function(){ setStatus(t,1); }); add('Stunned (yellow ✦)', function(){ setStatus(t,2); }); add('Trait (purple ?)', function(){ setStatus(t,3); });
-    section('Role ring'); var roleBtn = document.createElement('button'); roleBtn.textContent = 'Role ring ▸'; roleBtn.addEventListener('mouseenter', function(){ var subLeft = ctxMenu.getBoundingClientRect().right + 6; openRoleSub(t, ring, subLeft, roleBtn.getBoundingClientRect().top); }); roleBtn.addEventListener('click', function(){ var subLeft = ctxMenu.getBoundingClientRect().right + 6; openRoleSub(t, ring, subLeft, roleBtn.getBoundingClientRect().top); }); ctxMenu.appendChild(roleBtn);
-    section('Send to'); var sendBtn = document.createElement('button'); sendBtn.textContent = 'Send to ▸'; sendBtn.addEventListener('mouseenter', function(){ var subLeft = ctxMenu.getBoundingClientRect().right + 6; openSendSub(t, subLeft, sendBtn.getBoundingClientRect().top); }); sendBtn.addEventListener('click', function(){ var subLeft = ctxMenu.getBoundingClientRect().right + 6; openSendSub(t, subLeft, sendBtn.getBoundingClientRect().top); }); ctxMenu.appendChild(sendBtn);
-    section('Ball'); add(t.hasBall?'Remove ball (to park)':'Give ball to this player', function(){ if(t.hasBall){ setPlayerHasBall(t,false); ensureBallInPark(); } else { giveBallToPlayer(t); } });
-    section('Other'); add(t.activated?'Unmark activated':'Mark activated', function(){ t.activated=!t.activated; applyActivated(el,t.activated); }); add('<span style="color:#ef4444">Delete token</span>', function(){ delToken(t.id); });
-    ctxMenu.style.display='block'; ctxMenu.style.left=mx+'px'; ctxMenu.style.top=my+'px'; setTimeout(function(){
-      function outsideClick(ev){
-        if(!ctxMenu.contains(ev.target) && !ctxSub.contains(ev.target)){
-          closeCtx();
-          document.removeEventListener('click', outsideClick);
+    function refreshRecvUI() {
+        var rh = document.getElementById('recvHome');
+        var ra = document.getElementById('recvAway');
+        var home = (state.receivedFirst === 'home');
+        var away = (state.receivedFirst === 'away');
+        rh.classList.toggle('active', home);
+        ra.classList.toggle('active', away);
+        rh.setAttribute('aria-pressed', home ? 'true' : 'false');
+        ra.setAttribute('aria-pressed', away ? 'true' : 'false');
+    }
+    document.getElementById('half1').addEventListener('click', function() {
+        state.half = 1;
+        refreshHalfUI();
+        saveLS();
+    });
+    document.getElementById('half2').addEventListener('click', function() {
+        state.half = 2;
+        refreshHalfUI();
+        saveLS();
+    });
+    document.getElementById('recvHome').addEventListener('click', function() {
+        state.receivedFirst = 'home';
+        refreshRecvUI();
+        saveLS();
+    });
+    document.getElementById('recvAway').addEventListener('click', function() {
+        state.receivedFirst = 'away';
+        refreshRecvUI();
+        saveLS();
+    });
+
+    // Save-slot UI
+    var slotInput = document.getElementById('slotInput');
+    var slotHint = document.getElementById('slotHint');
+    var slotSwitch = document.getElementById('slotSwitch');
+    var slotCopy = document.getElementById('slotCopy');
+
+    function refreshSlotUI() {
+        if (slotInput) slotInput.value = state.slot;
+        if (slotHint) slotHint.textContent = 'Slot "' + state.slot + '" — autosaves locally for this path.';
+    }
+    refreshSlotUI();
+    slotSwitch.addEventListener('click', function() {
+        var newSlot = (slotInput.value || '').trim() || 'default';
+        if (newSlot === state.slot) return;
+        state.slot = newSlot;
+        var p = new URLSearchParams(location.search);
+        p.set('slot', state.slot);
+        history.replaceState(null, '', location.pathname + '?' + p.toString());
+        try {
+            localStorage.setItem('bb7s_last_slot:' + PATH_KEY, state.slot);
+        } catch (e) {}
+        loadLS();
+        refreshSlotUI();
+    });
+    slotCopy.addEventListener('click', function() {
+        var base = location.href.split('#')[0].split('?')[0];
+        var link = base + '?slot=' + encodeURIComponent(state.slot);
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(link).then(function() {
+                alert('Link copied: ' + link);
+            }, function() {
+                prompt('Copy link:', link);
+            });
+        } else {
+            prompt('Copy link:', link);
         }
-      }
-      document.addEventListener('click', outsideClick);
-    },0);
-  }
-  function openRoleSub(t, ring, leftPos, top){
-    ctxSub.innerHTML='';
-    var roles=['BLITZER','THROWER','LINEMAN','BLOCKER','CATCHER','OTHER1','OTHER2','(none)'];
-    roles.forEach(function(rn){
-      var b=document.createElement('button');
-      b.textContent=rn;
-      b.addEventListener('click', function(){ t.role = rn==='(none)'?'':rn; ring.className='ring ' + (t.role||''); closeCtx(); saveLS(); });
-      ctxSub.appendChild(b);
     });
-    ctxSub.style.display='block';
-    var cmRect = ctxMenu.getBoundingClientRect();
-    var subRect = ctxSub.getBoundingClientRect();
-    var left = Math.min(leftPos, window.innerWidth - subRect.width - 8);
-    var topPos = Math.max(8, Math.min(Math.max(cmRect.top, top), window.innerHeight - subRect.height - 8));
-    ctxSub.style.left= left + 'px';
-    ctxSub.style.top = topPos + 'px';
-  }
-  function openSendSub(t, leftPos, top){
-    ctxSub.innerHTML='';
-    var team = t.team==='home' ? 'A' : 'B';
-    var items=[["Reserves", team+'_RES'], ["KO'd", team+'_KO'], ["Casualties", team+'_CAS']];
-    items.forEach(function(it){
-      var b=document.createElement('button'); b.textContent=it[0];
-      b.addEventListener('click', function(){ sendToZone(t, it[1]); closeCtx(); saveLS(); });
-      ctxSub.appendChild(b);
+
+    // Counters & token buttons wiring
+    function bindCounter(id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+
+        var val = el.querySelector('.val');
+        var dec = el.querySelector('[data-delta="-1"]');
+        var inc = el.querySelector('[data-delta="1"]');
+
+        function refresh() {
+            if (!val) return;
+            val.textContent = state.counters[id] || 0;
+        }
+
+        if (dec) {
+            dec.addEventListener('click', function() {
+                state.counters[id] = Math.max(0, (state.counters[id] || 0) - 1);
+                refresh();
+                saveLS();
+            });
+        }
+        if (inc) {
+            inc.addEventListener('click', function() {
+                state.counters[id] = (state.counters[id] || 0) + 1;
+                refresh();
+                saveLS();
+            });
+        }
+        refresh();
+    }
+
+    var COUNTER_IDS = ['scoreA', 'scoreB', 'turnA', 'turnB', 'rrA', 'rrB'];
+    COUNTER_IDS.forEach(function(id) {
+        bindCounter(id);
     });
-    ctxSub.style.display='block';
-    var cmRect = ctxMenu.getBoundingClientRect();
-    var subRect = ctxSub.getBoundingClientRect();
-    var left = Math.min(leftPos, window.innerWidth - subRect.width - 8);
-    var topPos = Math.max(8, Math.min(Math.max(cmRect.top, top), window.innerHeight - subRect.height - 8));
-    ctxSub.style.left= left + 'px';
-    ctxSub.style.top = topPos + 'px';
-  }
-  function closeCtx(){ ctxMenu.style.display='none'; ctxSub.style.display='none'; }
-  function delToken(id){ for(var i=0;i<state.tokens.length;i++){ if(state.tokens[i].id===id){ var t=state.tokens[i]; var el=document.querySelector('.token[data-id="'+id+'"]'); if(el && el.parentElement) el.parentElement.removeChild(el); state.tokens.splice(i,1); if(t.place && zones[t.place]) layoutZone(t.place); break; } } }
 
-  // ===== Ball helpers & possession =====
-  function setPlayerHasBall(t, has){ t.hasBall=!!has; var el=document.querySelector('.token[data-id="'+t.id+'"]'); if(el){ var bm=el.querySelector('.ballmark'); if(bm) bm.style.display = has?'block':'none'; } }
-  function clearAllPlayerPossessionExcept(exId){ for(var i=0;i<state.tokens.length;i++){ var p=state.tokens[i]; if(p.team==='home'||p.team==='away'){ if(exId && p.id===exId) continue; if(p.hasBall) setPlayerHasBall(p,false); } } }
-  function giveBallToPlayer(t){ clearAllPlayerPossessionExcept(t.id); setPlayerHasBall(t,true); parkBall(); saveLS(); }
-  function parkBall(){ var ball=null; for(var i=0;i<state.tokens.length;i++){ if(state.tokens[i].team==='ball'){ ball=state.tokens[i]; break; } } if(!ball) return; var el=document.querySelector('.token[data-id="'+ball.id+'"]'); if(el && el.parentElement!==zones.BALL_PARK){ if(el.parentElement) el.parentElement.removeChild(el); zones.BALL_PARK.appendChild(el); } ball.place='BALL_PARK'; layoutZone('BALL_PARK'); }
-  function ensureBallInPark(){ ensureBall(); parkBall(); }
-function placeLooseBallAt(col, row){
-  ensureBall();                       // make sure the ball token exists
-  clearAllPlayerPossessionExcept(null);
+    var addHomeBtn = document.getElementById('addHome');
+    if (addHomeBtn) {
+        addHomeBtn.addEventListener('click', function() {
+            addToken('home');
+        });
+    }
 
-  var ball = state.tokens.find(function(t){ return t.team === 'ball'; });
-  if(!ball) return;
+    var addAwayBtn = document.getElementById('addAway');
+    if (addAwayBtn) {
+        addAwayBtn.addEventListener('click', function() {
+            addToken('away');
+        });
+    }
 
-  var el = document.querySelector('.token[data-id="'+ball.id+'"]');
-  if(el && el.parentElement !== boardWrap){
-    if(el.parentElement) el.parentElement.removeChild(el);
-    boardWrap.appendChild(el);
-  }
+    var endTurnBtn = document.getElementById('endTurn');
+    if (endTurnBtn) {
+        endTurnBtn.addEventListener('click', doEndTurn);
+    }
 
-  ball.place = 'board';
-  ball.x = col;
-  ball.y = row;
-
-  el.style.left = (col * SQ + SQ/2) + 'px';
-  el.style.top  = (row * SQ + SQ/2) + 'px';
-  el.style.transform = 'translate(-50%, -50%)';
-}
-
-  // ===== Persistence (per-path + per-slot) =====
-  function saveLS(){ var data = { tokens: state.tokens.map(function(t){ return Object.assign({}, t); }), counters: Object.assign({}, state.counters), nextId: nextId, activeTeam: state.activeTeam, half: state.half, receivedFirst: state.receivedFirst, squareMarks: Array.from(squareMarks), actions: state.actions }; try{ localStorage.setItem(saveKey(), JSON.stringify(data)); localStorage.setItem('bb7s_last_slot:'+PATH_KEY, state.slot); }catch(e){} }
-  function loadLS(){ var raw=null; try{ raw=localStorage.getItem(saveKey()); }catch(e){} try{ document.querySelectorAll('.token').forEach(function(n){ if(n && n.parentElement) n.parentElement.removeChild(n); }); state.tokens=[]; if(raw){ var data=JSON.parse(raw); Object.assign(state.counters, data.counters||{}); state.actions = data.actions || { home:{blitz:false,pass:false,handoff:false,foul:false,ttm:false}, away:{blitz:false,pass:false,handoff:false,foul:false,ttm:false} }; nextId=data.nextId||1; state.activeTeam=data.activeTeam||'home'; state.half=data.half||1; state.receivedFirst=data.receivedFirst||''; squareMarks.clear(); if(Array.isArray(data.squareMarks)) data.squareMarks.forEach(function(k){ squareMarks.add(k); }); redrawMarks(); (data.tokens||[]).forEach(function(t){ state.tokens.push(Object.assign({}, t)); mountToken(t); }); } else { state.counters={scoreA:0,scoreB:0,turnA:0,turnB:0,rrA:0,rrB:0}; nextId=1; state.activeTeam='home'; state.half=1; state.receivedFirst=''; squareMarks.clear(); redrawMarks();  state.actions = { home:{blitz:false,pass:false,handoff:false,foul:false,ttm:false}, away:{blitz:false,pass:false,handoff:false,foul:false,ttm:false} }; } ['scoreA','scoreB','turnA','turnB','rrA','rrB'].forEach(function(id){ var el=document.getElementById(id); if(el){ el.querySelector('.val').textContent = state.counters[id]||0; } }); Object.keys(zones).forEach(layoutZone); ensureBall(); ensureBallInPark(); updateActiveUI(); refreshActionsUI(); refreshHalfUI(); refreshRecvUI(); return !!raw; }catch(err){ console.error(err); return false; } }
-
-  // ===== Header controls (dropdown) =====
-  function resetToBlank(){ document.querySelectorAll('.token').forEach(function(n){ if(n && n.parentElement) n.parentElement.removeChild(n); }); state.tokens=[]; state.counters={scoreA:0,scoreB:0,turnA:0,turnB:0,rrA:0,rrB:0}; nextId=1; squareMarks.clear(); redrawMarks(); state.activeTeam='home'; state.half=1; state.receivedFirst=''; state.actions = { home:{blitz:false,pass:false,handoff:false,foul:false,ttm:false}, away:{blitz:false,pass:false,handoff:false,foul:false,ttm:false} }; ['scoreA','scoreB','turnA','turnB','rrA','rrB'].forEach(function(id){ var el=document.getElementById(id); if(el){ el.querySelector('.val').textContent = state.counters[id]; } }); ensureBall(); ensureBallInPark(); updateActiveUI(); refreshActionsUI(); refreshHalfUI(); refreshRecvUI(); }
-
-  document.getElementById('save').addEventListener('click', function(){ saveLS(); alert('Saved to browser storage.'); });
-  document.getElementById('load').addEventListener('click', function(){ if(!loadLS()) alert('No saved state found for this slot.'); });
-  document.getElementById('export').addEventListener('click', function(){ var data = localStorage.getItem(saveKey()) || '{}'; var blob=new Blob([data],{type:'application/json'}); var a=document.createElement('a'); a.href=URL.createObjectURL(blob); var safeSlot = (state.slot||'default').replace(/[^a-z0-9_-]+/gi,'-'); a.download='bb7s_state_'+ safeSlot +'.json'; a.click(); URL.revokeObjectURL(a.href); });
-  document.getElementById('importFile').addEventListener('change', function(e){ var f=e.target.files[0]; if(!f) return; var reader=new FileReader(); reader.onload=function(){ try{ localStorage.setItem(saveKey(), reader.result); loadLS(); alert('State imported into slot "'+state.slot+'".'); }catch(err){ alert('Import failed.'); } }; reader.readAsText(f); });
-  document.getElementById('reset').addEventListener('click', function(){ if(!confirm('Clear the board and reset this slot?')) return; try{ localStorage.removeItem(saveKey()); }catch(e){} resetToBlank(); saveLS(); });
-
-  // Dropdown open/close
-  var menuBtn = document.getElementById('menuSaves');
-  var menu = document.getElementById('menuDropdown');
-  menuBtn.addEventListener('click', function(e){ e.stopPropagation(); var open = menu.classList.toggle('show'); menuBtn.setAttribute('aria-expanded', open?'true':'false'); });
-  document.addEventListener('click', function(e){ if(!menu.contains(e.target) && e.target!==menuBtn){ menu.classList.remove('show'); menuBtn.setAttribute('aria-expanded','false'); } });
-  document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ menu.classList.remove('show'); menuBtn.setAttribute('aria-expanded','false'); } });
-
-  // Right panel toggles
-  function refreshHalfUI(){
-    var h1 = document.getElementById('half1');
-    var h2 = document.getElementById('half2');
-    var isFirst = (state.half === 1);
-    h1.classList.toggle('active', isFirst);
-    h2.classList.toggle('active', !isFirst);
-    h1.setAttribute('aria-pressed', isFirst ? 'true' : 'false');
-    h2.setAttribute('aria-pressed', !isFirst ? 'true' : 'false');
-  }
-
-
-  // Actions UI (per active team)
-  function refreshActionsUI(){
-    var scope = state.actions[state.activeTeam] || {blitz:false,pass:false,handoff:false,foul:false,ttm:false};
-    document.querySelectorAll('#turnActions .action').forEach(function(btn){
-      var key = btn.getAttribute('data-act');
-      btn.classList.toggle('active', !!scope[key]);
-      btn.setAttribute('aria-pressed', (!!scope[key]) ? 'true' : 'false');
-    });
-  }
-  document.addEventListener('click', function(e){
-    var btn = e.target.closest('#turnActions .action');
-    if(!btn) return;
-    var key = btn.getAttribute('data-act');
-    var scope = state.actions[state.activeTeam];
-    scope[key] = !scope[key];
-    btn.classList.toggle('active', scope[key]);
-    btn.setAttribute('aria-pressed', scope[key] ? 'true' : 'false');
-    saveLS();
-  });
-function refreshRecvUI(){
-    var rh = document.getElementById('recvHome');
-    var ra = document.getElementById('recvAway');
-    var home = (state.receivedFirst === 'home');
-    var away = (state.receivedFirst === 'away');
-    rh.classList.toggle('active', home);
-    ra.classList.toggle('active', away);
-    rh.setAttribute('aria-pressed', home ? 'true' : 'false');
-    ra.setAttribute('aria-pressed', away ? 'true' : 'false');
-  }
-  document.getElementById('half1').addEventListener('click', function(){ state.half=1; refreshHalfUI(); saveLS(); });
-  document.getElementById('half2').addEventListener('click', function(){ state.half=2; refreshHalfUI(); saveLS(); });
-  document.getElementById('recvHome').addEventListener('click', function(){ state.receivedFirst='home'; refreshRecvUI(); saveLS(); });
-  document.getElementById('recvAway').addEventListener('click', function(){ state.receivedFirst='away'; refreshRecvUI(); saveLS(); });
-
-  // Save-slot UI
-  var slotInput = document.getElementById('slotInput');
-  var slotHint = document.getElementById('slotHint');
-  var slotSwitch = document.getElementById('slotSwitch');
-  var slotCopy = document.getElementById('slotCopy');
-  function refreshSlotUI(){ if(slotInput) slotInput.value = state.slot; if(slotHint) slotHint.textContent = 'Slot "'+state.slot+'" — autosaves locally for this path.'; }
-  refreshSlotUI();
-  slotSwitch.addEventListener('click', function(){ var newSlot = (slotInput.value || '').trim() || 'default'; if(newSlot === state.slot) return; state.slot = newSlot; var p = new URLSearchParams(location.search); p.set('slot', state.slot); history.replaceState(null, '', location.pathname + '?' + p.toString()); try{ localStorage.setItem('bb7s_last_slot:'+PATH_KEY, state.slot); }catch(e){} loadLS(); refreshSlotUI(); });
-  slotCopy.addEventListener('click', function(){ var base = location.href.split('#')[0].split('?')[0]; var link = base + '?slot=' + encodeURIComponent(state.slot); if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(link).then(function(){ alert('Link copied: '+link); }, function(){ prompt('Copy link:', link); }); } else { prompt('Copy link:', link); } });
-
-// Counters & token buttons wiring
-function bindCounter(id){
-  var el = document.getElementById(id);
-  if(!el) return;
-
-  var val = el.querySelector('.val');
-  var dec = el.querySelector('[data-delta="-1"]');
-  var inc = el.querySelector('[data-delta="1"]');
-
-  function refresh(){
-    if(!val) return;
-    val.textContent = state.counters[id] || 0;
-  }
-
-  if(dec){
-    dec.addEventListener('click', function(){
-      state.counters[id] = Math.max(0, (state.counters[id]||0) - 1);
-      refresh(); saveLS();
-    });
-  }
-  if(inc){
-    inc.addEventListener('click', function(){
-      state.counters[id] = (state.counters[id]||0) + 1;
-      refresh(); saveLS();
-    });
-  }
-  refresh();
-}
-
-var COUNTER_IDS = ['scoreA','scoreB','turnA','turnB','rrA','rrB'];
-COUNTER_IDS.forEach(function(id){ bindCounter(id); });
-
-var addHomeBtn = document.getElementById('addHome');
-if(addHomeBtn){ addHomeBtn.addEventListener('click', function(){ addToken('home'); }); }
-
-var addAwayBtn = document.getElementById('addAway');
-if(addAwayBtn){ addAwayBtn.addEventListener('click', function(){ addToken('away'); }); }
-
-var endTurnBtn = document.getElementById('endTurn');
-if(endTurnBtn){ endTurnBtn.addEventListener('click', doEndTurn); }
-
-// Initial
-loadLS();
-updateActiveUI(); refreshActionsUI();
-ensureBall(); ensureBallInPark();
+    // Initial
+    loadLS();
+    updateActiveUI();
+    refreshActionsUI();
+    ensureBall();
+    ensureBallInPark();
 
 })();
 </script>
