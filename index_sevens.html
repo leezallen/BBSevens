@@ -1353,10 +1353,11 @@
                     squareMarks.add(k);
                 });
                 redrawMarks();
-                (data.tokens || []).forEach(function(t) {
-                    state.tokens.push(Object.assign({}, t));
-                    mountToken(t);
-                });
+				(data.tokens || []).forEach(function(t){
+				  state.tokens.push(t);
+				  mountToken(t); // again, same object
+				});
+
                 // --- Normalize loaded tokens (fix string/invalid statuses, etc.) ---
                 state.tokens.forEach(function(tok){
                   // Coerce and clamp status to known numeric values
