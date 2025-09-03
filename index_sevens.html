@@ -265,6 +265,8 @@
 	(function() {
     'use strict';
 
+	window.__ctx = { allowManualDown: 0 };	
+
     var SQ = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sq'), 10);
     var COLS = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--cols'), 10);
     var ROWS = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--rows'), 10);
@@ -712,6 +714,11 @@
       var next = Number(status);
       if (next !== 0 && next !== 1 && next !== 2 && next !== 3) next = 0;
 
+	  // DEBUG: if something sets DOWN and it's not Stunned -> Down or a manual menu action, log it.
+	  if (next === STATUS.DOWN && !(prev === STATUS.STUNNED || __ctx.allowManualDown > 0)) {
+	    console.warn('Unexpected set to DOWN', {id:t.id, prev:prev, next:next, team:t.team}, new Error().stack);
+	  }
+		
       t.status = next; // store as NUMBER
 
       // Decide auto-activation before drawing
@@ -1081,7 +1088,9 @@
             setStatus(t, 0);
         });
         add('Down (green arrows)', function() {
-            setStatus(t, 1);
+            __ctx.allowManualDown++;
+			setStatus(t, STATUS.DOWN);
+			__ctx.allowManualDown--;
         });
         add('Stunned (yellow ✦)', function() {
             setStatus(t, 2);
